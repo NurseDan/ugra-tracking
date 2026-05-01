@@ -13,11 +13,11 @@ export default function Dashboard({ data, formatCDT, highestAlert, lastUpdate })
           const d = data[g.id]
           const alertClass = d?.alert || 'GREEN'
           const alertLabel = ALERT_LEVELS[alertClass]?.label || 'Normal'
-          
-          const historyHeights = d?.history 
-            ? d.history.map(h => h.height).filter(h => typeof h === 'number' && !isNaN(h)) 
+
+          const historyHeights = d?.history
+            ? d.history.map(h => h.height).filter(h => typeof h === 'number' && !isNaN(h))
             : []
-            
+
           const sparklineColor = `var(--alert-${alertClass.toLowerCase()})`
 
           return (
@@ -28,6 +28,19 @@ export default function Dashboard({ data, formatCDT, highestAlert, lastUpdate })
                   <div className={`alert-badge ${alertClass}`}>
                     {alertLabel}
                   </div>
+                </div>
+
+                {/* Sentinel Monitoring */}
+                <div style={{ marginBottom: 10 }}>
+                  <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Sentinel Monitoring</div>
+                  <div style={{ fontWeight: 700, color: '#60a5fa' }}>
+                    {d?.sentinelLevel || '—'} ({d?.sentinelScore ?? 0})
+                  </div>
+                  {d?.etaHours && (
+                    <div style={{ fontSize: '0.7rem', color: '#f59e0b' }}>
+                      Downstream impact ~{d.etaHours.toFixed(1)}h
+                    </div>
+                  )}
                 </div>
 
                 <div className="gauge-metrics">
@@ -45,15 +58,8 @@ export default function Dashboard({ data, formatCDT, highestAlert, lastUpdate })
                       <span className="metric-unit"> cfs</span>
                     </div>
                   </div>
-                  <div className="metric">
-                    <div className="metric-label">Flood Stage</div>
-                    <div>
-                      <span className="metric-value" style={{ fontSize: '1.25rem' }}>{g.floodStageFt ? g.floodStageFt : 'N/A'}</span>
-                      {g.floodStageFt && <span className="metric-unit"> ft</span>}
-                    </div>
-                  </div>
                 </div>
-                
+
                 <div style={{ marginBottom: '16px' }}>
                   <div className="metric-label" style={{ marginBottom: '0' }}>Past 2 Hours</div>
                   <Sparkline data={historyHeights} color={sparklineColor} />
@@ -63,7 +69,7 @@ export default function Dashboard({ data, formatCDT, highestAlert, lastUpdate })
                   <div style={{ color: '#e2e8f0', fontWeight: '500' }}>
                     Gauge Updated: <span style={{ color: '#94a3b8' }}>{d?.time ? formatCDT(d.time) : '—'}</span>
                   </div>
-                  <div style={{ color: '#60a5fa', fontWeight: '600' }}>View Details &rarr;</div>
+                  <div style={{ color: '#60a5fa', fontWeight: '600' }}>View Details →</div>
                 </div>
               </div>
             </Link>
