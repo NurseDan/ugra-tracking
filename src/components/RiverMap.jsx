@@ -1,4 +1,5 @@
-import { MapContainer, TileLayer, WMSTileLayer, Marker, Polyline, Tooltip } from 'react-leaflet'
+import { useEffect } from 'react'
+import { MapContainer, TileLayer, WMSTileLayer, Marker, Polyline, Tooltip, useMap } from 'react-leaflet'
 import { useNavigate } from 'react-router-dom'
 import { GAUGES } from '../config/gauges'
 import { alertColor } from '../lib/alertColors'
@@ -10,22 +11,38 @@ const getArrow = (rate) => {
   return '—'
 }
 
+// Only draw the Guadalupe main stem — not cross-basin rivers
+const GUADALUPE_STEM_ORDERS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9])
+
+function BoundsController() {
+  const map = useMap()
+  useEffect(() => {
+    const coords = GAUGES.map(g => [g.lat, g.lng])
+    if (coords.length > 0) {
+      map.fitBounds(L.latLngBounds(coords), { padding: [40, 40] })
+    }
+  }, [map])
+  return null
+}
+
 export default function RiverMap({ gauges }) {
   const sorted = [...GAUGES].sort((a, b) => a.order - b.order)
   const navigate = useNavigate()
 
-  const flowLine = sorted.map(g => [g.lat, g.lng])
+  const guadalupeStem = sorted
+    .filter(g => GUADALUPE_STEM_ORDERS.has(g.order))
+    .map(g => [g.lat, g.lng])
 
   return (
-    <MapContainer center={[30.05, -99.15]} zoom={10} style={{ height: 400, width: '100%', zIndex: 0 }}>
-      {/* ESRI Topo Map Base for terrain features */}
-      <TileLayer 
-        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}" 
+    <MapContainer center={[29.9, -99.1]} zoom={8} style={{ height: 400, width: '100%', zIndex: 0 }}>
+      <BoundsController />
+
+      <TileLayer
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
         attribution="Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community"
       />
 
-      {/* Live NEXRAD Radar WMS Layer */}
-      <WMSTileLayer 
+      <WMSTileLayer
         url="https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi"
         layers="nexrad-n0r-900913"
         format="image/png"
@@ -34,7 +51,7 @@ export default function RiverMap({ gauges }) {
         attribution="Weather data &copy; IEM Nexrad"
       />
 
-      <Polyline positions={flowLine} pathOptions={{ color: '#3b82f6', weight: 4, opacity: 0.8 }} />
+      <Polyline positions={guadalupeStem} pathOptions={{ color: '#3b82f6', weight: 4, opacity: 0.8 }} />
 
       {sorted.map(g => {
         const d = gauges[g.id]
@@ -43,17 +60,17 @@ export default function RiverMap({ gauges }) {
         const arrow = getArrow(rate)
 
         const iconHtml = `<div style="background-color: ${color}; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 16px; border: 2px solid white; box-shadow: 0 0 10px ${color}; cursor: pointer;">${arrow}</div>`
-        const customIcon = new L.DivIcon({ 
-          html: iconHtml, 
-          className: 'custom-gauge-icon', 
+        const customIcon = new L.DivIcon({
+          html: iconHtml,
+          className: 'custom-gauge-icon',
           iconSize: [28, 28],
           iconAnchor: [14, 14]
         })
 
         return (
-          <Marker 
-            key={g.id} 
-            position={[g.lat, g.lng]} 
+          <Marker
+            key={g.id}
+            position={[g.lat, g.lng]}
             icon={customIcon}
             eventHandlers={{
               click: () => navigate(`/gauge/${g.id}`)

@@ -1,9 +1,13 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { GAUGES, REFRESH_MS, FAST_FLOW_MPH, FLOOD_FLOW_MPH } from './config/gauges'
+import { GAUGES, REFRESH_MS, FAST_FLOW_MPH, FLOOD_FLOW_MPH, STALE_AFTER_MINUTES } from './config/gauges'
 import { fetchUSGSGauges } from './lib/usgs'
+import { fetchPrecipitationForecast } from './lib/weatherApi'
 import { calculateRates, getAlertLevel, getHighestAlert, ALERT_LEVELS } from './lib/alertEngine'
-import { Activity, AlertTriangle, Clock } from 'lucide-react'
+import { detectSurges } from './lib/surgeEngine'
+import { logIncident } from './lib/incidentLog'
+import { formatCDT } from './lib/formatTime'
+import { Activity, AlertTriangle, Clock, WifiOff } from 'lucide-react'
 
 import Dashboard from './pages/Dashboard'
 import GaugeDetail from './pages/GaugeDetail'
@@ -53,9 +57,18 @@ function estimateArrivalHours(gauge, d) {
   return gauge.downstreamMiles / speed
 }
 
+function isStaleData(timeStr) {
+  if (!timeStr) return true
+  const ageMinutes = (Date.now() - new Date(timeStr).getTime()) / 60000
+  return ageMinutes > STALE_AFTER_MINUTES
+}
+
 export default function App() {
   const [data, setData] = useState({})
+  const [surgeEvents, setSurgeEvents] = useState([])
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [fetchError, setFetchError] = useState(false)
+  const prevAlertsRef = useRef({})
 
   useEffect(() => {
     fetchData()
@@ -66,7 +79,13 @@ export default function App() {
   async function fetchData() {
     try {
       const ids = GAUGES.map(g => g.id)
-      const usgsData = await fetchUSGSGauges(ids)
+      const [usgsData, ...forecasts] = await Promise.all([
+        fetchUSGSGauges(ids),
+        ...GAUGES.map(g => fetchPrecipitationForecast(g.lat, g.lng))
+      ])
+
+      const forecastByGauge = {}
+      GAUGES.forEach((g, i) => { forecastByGauge[g.id] = forecasts[i] })
 
       const processed = {}
 
@@ -74,9 +93,11 @@ export default function App() {
         const d = usgsData[g.id]
         if (!d) continue
 
+        const stale = isStaleData(d.time)
         const rates = calculateRates(d.history || [], d)
-        const alert = getAlertLevel(rates)
-        const base = { ...d, alert, rates }
+        const alert = getAlertLevel(rates, { isStale: stale })
+        const forecast = forecastByGauge[g.id]
+        const base = { ...d, alert, rates, forecast, isStale: stale }
         const sentinelScore = getSentinelScore(base)
 
         processed[g.id] = {
@@ -85,26 +106,33 @@ export default function App() {
           sentinelLevel: getSentinelLevel(sentinelScore),
           etaHours: estimateArrivalHours(g, base)
         }
+
+        const prevAlert = prevAlertsRef.current[g.id]
+        const prevPriority = ALERT_LEVELS[prevAlert]?.priority ?? -1
+        const newPriority = ALERT_LEVELS[alert]?.priority ?? 0
+        if (prevAlert !== undefined && newPriority > prevPriority) {
+          logIncident({
+            gaugeId: g.id,
+            gaugeName: g.name,
+            fromAlert: prevAlert,
+            toAlert: alert,
+            height: d.height,
+            flow: d.flow,
+            time: new Date().toISOString()
+          })
+        }
+        prevAlertsRef.current[g.id] = alert
       }
 
+      const surges = detectSurges(processed)
       setData(processed)
+      setSurgeEvents(surges)
       setLastUpdate(new Date())
+      setFetchError(false)
     } catch (err) {
-      console.error("Failed to fetch data:", err)
+      console.error('Failed to fetch data:', err)
+      setFetchError(true)
     }
-  }
-
-  const formatCDT = (dateStr) => {
-    if (!dateStr) return '—'
-    return new Date(dateStr).toLocaleString('en-US', {
-      timeZone: 'America/Chicago',
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-      timeZoneName: 'short'
-    })
   }
 
   const alertsArray = Object.values(data).map(d => d.alert)
@@ -120,7 +148,7 @@ export default function App() {
           </div>
           <div className="header-meta">
             <div className={`alert-badge ${highestAlert}`}>
-              <AlertTriangle size={16} /> 
+              <AlertTriangle size={16} />
               System Status: {ALERT_LEVELS[highestAlert]?.label || 'Normal'}
             </div>
             <div className="header-time" style={{ marginTop: '8px', fontWeight: '500' }}>
@@ -130,9 +158,17 @@ export default function App() {
           </div>
         </header>
 
+        {fetchError && (
+          <div className="error-banner">
+            <WifiOff size={16} />
+            Data refresh failed — displaying last known values
+            {lastUpdate && <span> from {formatCDT(lastUpdate)}</span>}
+          </div>
+        )}
+
         <Routes>
-          <Route path="/" element={<Dashboard data={data} formatCDT={formatCDT} highestAlert={highestAlert} lastUpdate={lastUpdate} />} />
-          <Route path="/gauge/:id" element={<GaugeDetail data={data} formatCDT={formatCDT} />} />
+          <Route path="/" element={<Dashboard data={data} surgeEvents={surgeEvents} />} />
+          <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
         </Routes>
       </div>
     </BrowserRouter>
