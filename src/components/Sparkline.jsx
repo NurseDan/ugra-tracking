@@ -8,19 +8,27 @@ export default function Sparkline({ data, color = '#60a5fa', height = 40, width 
       </div>
     )
   }
-  
+
   const min = Math.min(...data)
   const max = Math.max(...data)
   const range = max - min === 0 ? 1 : max - min
-  
+
   const points = data.map((d, i) => {
     const x = (i / (data.length - 1)) * width
-    const y = height - ((d - min) / range) * (height - 4) - 2 
+    const y = height - ((d - min) / range) * (height - 4) - 2
     return `${x},${y}`
   }).join(' ')
 
+  const areaPoints = `0,${height} ${points} ${width},${height}`
+
   return (
     <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" style={{ overflow: 'visible', marginTop: '12px' }}>
+      <polygon
+        points={areaPoints}
+        fill={color}
+        fillOpacity={0.15}
+        stroke="none"
+      />
       <polyline
         fill="none"
         stroke={color}

@@ -2,17 +2,30 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { GAUGES } from '../config/gauges'
 import { ALERT_LEVELS } from '../lib/alertEngine'
+import { formatCDT } from '../lib/formatTime'
 import RiverMap from '../components/RiverMap'
 import Sparkline from '../components/Sparkline'
+import { AlertTriangle, Clock } from 'lucide-react'
 
-export default function Dashboard({ data, formatCDT, highestAlert, lastUpdate }) {
+export default function Dashboard({ data, surgeEvents }) {
   return (
     <>
+      {surgeEvents?.length > 0 && (
+        <div className="surge-banner">
+          <AlertTriangle size={16} />
+          <strong>Upstream Surge Alert:</strong>
+          {surgeEvents.map((e, i) => (
+            <span key={i}> {e.message}</span>
+          ))}
+        </div>
+      )}
+
       <div className="dashboard-grid">
         {GAUGES.map(g => {
           const d = data[g.id]
           const alertClass = d?.alert || 'GREEN'
           const alertLabel = ALERT_LEVELS[alertClass]?.label || 'Normal'
+          const surgeEvent = surgeEvents?.find(e => e.downstreamGaugeId === g.id)
 
           const historyHeights = d?.history
             ? d.history.map(h => h.height).filter(h => typeof h === 'number' && !isNaN(h))
@@ -23,6 +36,12 @@ export default function Dashboard({ data, formatCDT, highestAlert, lastUpdate })
           return (
             <Link to={`/gauge/${g.id}`} key={g.id} style={{ textDecoration: 'none', color: 'inherit' }}>
               <div className="glass-panel gauge-card">
+                {d?.isStale && (
+                  <div className="stale-indicator">
+                    <Clock size={11} /> Stale data
+                  </div>
+                )}
+
                 <div className="gauge-header">
                   <div className="gauge-name">{g.name}</div>
                   <div className={`alert-badge ${alertClass}`}>
@@ -30,7 +49,13 @@ export default function Dashboard({ data, formatCDT, highestAlert, lastUpdate })
                   </div>
                 </div>
 
-                {/* Sentinel Monitoring */}
+                {surgeEvent && (
+                  <div className="surge-warning">
+                    <AlertTriangle size={12} />
+                    Upstream surge from {surgeEvent.sourceName}
+                  </div>
+                )}
+
                 <div style={{ marginBottom: 10 }}>
                   <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Sentinel Monitoring</div>
                   <div style={{ fontWeight: 700, color: '#60a5fa' }}>
@@ -65,7 +90,7 @@ export default function Dashboard({ data, formatCDT, highestAlert, lastUpdate })
                   <Sparkline data={historyHeights} color={sparklineColor} />
                 </div>
 
-                <div className="gauge-footer" style={{ borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '12px', marginTop: 'auto' }}>
+                <div className="gauge-footer">
                   <div style={{ color: '#e2e8f0', fontWeight: '500' }}>
                     Gauge Updated: <span style={{ color: '#94a3b8' }}>{d?.time ? formatCDT(d.time) : '—'}</span>
                   </div>
