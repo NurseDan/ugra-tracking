@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { GAUGES } from './config/gauges'
+import { GAUGES, REFRESH_MS } from './config/gauges'
 import { fetchUSGSGauges } from './lib/usgs'
 import { calculateRates, getAlertLevel, getHighestAlert, ALERT_LEVELS } from './lib/alertEngine'
 import { Activity, AlertTriangle, Clock } from 'lucide-react'
@@ -14,7 +14,7 @@ export default function App() {
 
   useEffect(() => {
     fetchData()
-    const i = setInterval(fetchData, 60000)
+    const i = setInterval(fetchData, REFRESH_MS)
     return () => clearInterval(i)
   }, [])
 
@@ -30,6 +30,7 @@ export default function App() {
         if (!d) continue
 
         const rates = calculateRates(d.history || [], d)
+
         const alert = getAlertLevel(rates)
 
         processed[g.id] = {
