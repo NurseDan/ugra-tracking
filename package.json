@@ -10,12 +10,12 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
+    "leaflet": "latest",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "leaflet": "latest",
     "react-leaflet": "latest",
-    "lucide-react": "latest"
-  },
-  "devDependencies": {}
+    "react-router-dom": "^7.14.2",
+    "vite": "latest"
+  }
 }

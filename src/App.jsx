@@ -1,16 +1,16 @@
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { GAUGES } from './config/gauges'
+import { fetchUSGSGauges } from './lib/usgs'
+import { calculateRates, getAlertLevel, getHighestAlert, ALERT_LEVELS } from './lib/alertEngine'
+import { Activity, AlertTriangle, Clock } from 'lucide-react'
 
-const GAUGES = [
-  { id: '08165300', name: 'North Fork near Hunt' },
-  { id: '08165500', name: 'Guadalupe at Hunt' },
-  { id: '08166140', name: 'Above Kerrville' },
-  { id: '08166200', name: 'Kerrville' },
-  { id: '08166250', name: 'Center Point' },
-  { id: '08167000', name: 'Comfort' }
-]
+import Dashboard from './pages/Dashboard'
+import GaugeDetail from './pages/GaugeDetail'
 
 export default function App() {
-  const [data, setData] = useState([])
+  const [data, setData] = useState({})
+  const [lastUpdate, setLastUpdate] = useState(null)
 
   useEffect(() => {
     fetchData()
@@ -19,33 +19,74 @@ export default function App() {
   }, [])
 
   async function fetchData() {
-    const ids = GAUGES.map(g => g.id).join(',')
-    const url = `https://waterservices.usgs.gov/nwis/iv/?format=json&sites=${ids}&parameterCd=00065,00060&period=PT2H`
-    const res = await fetch(url)
-    const json = await res.json()
+    try {
+      const ids = GAUGES.map(g => g.id)
+      const usgsData = await fetchUSGSGauges(ids)
 
-    const parsed = json.value.timeSeries.map(ts => ({
-      id: ts.sourceInfo.siteCode[0].value,
-      value: ts.values[0].value.slice(-1)[0].value,
-      time: ts.values[0].value.slice(-1)[0].dateTime
-    }))
+      const processed = {}
 
-    setData(parsed)
+      for (const g of GAUGES) {
+        const d = usgsData[g.id]
+        if (!d) continue
+
+        const rates = calculateRates(d.history || [], d)
+        const alert = getAlertLevel(rates)
+
+        processed[g.id] = {
+          ...d,
+          alert,
+          rates
+        }
+      }
+
+      setData(processed)
+      setLastUpdate(new Date())
+    } catch (err) {
+      console.error("Failed to fetch data:", err)
+    }
   }
 
+  const formatCDT = (dateStr) => {
+    if (!dateStr) return '—'
+    return new Date(dateStr).toLocaleString('en-US', {
+      timeZone: 'America/Chicago',
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short'
+    })
+  }
+
+  const alertsArray = Object.values(data).map(d => d.alert)
+  const highestAlert = alertsArray.length > 0 ? getHighestAlert(alertsArray) : 'GREEN'
+
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Guadalupe Sentinel</h1>
-      {GAUGES.map(g => {
-        const d = data.find(x => x.id === g.id)
-        return (
-          <div key={g.id} style={{ marginBottom: 10, border: '1px solid #ccc', padding: 10 }}>
-            <strong>{g.name}</strong>
-            <div>Level: {d?.value || '—'}</div>
-            <div>Updated: {d?.time || '—'}</div>
+    <BrowserRouter>
+      <div className="dashboard-container">
+        <header className="header">
+          <div className="header-title">
+            <Activity size={32} color="#60a5fa" />
+            Guadalupe Sentinel
           </div>
-        )
-      })}
-    </div>
+          <div className="header-meta">
+            <div className={`alert-badge ${highestAlert}`}>
+              <AlertTriangle size={16} /> 
+              System Status: {ALERT_LEVELS[highestAlert]?.label || 'Normal'}
+            </div>
+            <div className="header-time" style={{ marginTop: '8px', fontWeight: '500' }}>
+              <Clock size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
+              Dashboard Refreshed: {lastUpdate ? formatCDT(lastUpdate) : 'Loading...'}
+            </div>
+          </div>
+        </header>
+
+        <Routes>
+          <Route path="/" element={<Dashboard data={data} formatCDT={formatCDT} highestAlert={highestAlert} lastUpdate={lastUpdate} />} />
+          <Route path="/gauge/:id" element={<GaugeDetail data={data} formatCDT={formatCDT} />} />
+        </Routes>
+      </div>
+    </BrowserRouter>
   )
 }

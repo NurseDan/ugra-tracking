@@ -8,14 +8,29 @@ export async function fetchUSGSGauges(ids) {
   json.value.timeSeries.forEach(ts => {
     const site = ts.sourceInfo.siteCode[0].value
     const param = ts.variable.variableCode[0].value
-    const latest = ts.values[0].value.slice(-1)[0]
+    const values = ts.values[0].value.filter(v => Number(v.value) > -900000)
+    if (values.length === 0) return
+    
+    const latest = values[values.length - 1]
 
-    if (!result[site]) result[site] = {}
+    if (!result[site]) {
+      result[site] = { history: [] }
+    }
 
-    if (param === '00065') result[site].height = Number(latest.value)
-    if (param === '00060') result[site].flow = Number(latest.value)
+    if (param === '00065') {
+      result[site].height = Number(latest.value)
+      result[site].history = values.map(v => ({
+        time: v.dateTime,
+        height: Number(v.value)
+      }))
+    }
+    if (param === '00060') {
+      result[site].flow = Number(latest.value)
+    }
 
-    result[site].time = latest.dateTime
+    if (param === '00065' || !result[site].time) {
+      result[site].time = latest.dateTime
+    }
   })
 
   return result

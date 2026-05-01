@@ -17,7 +17,7 @@ export const GAUGES = [
     lng: -99.3153,
     order: 2,
     noaaSlug: 'HNTT2',
-    floodStageFt: null
+    floodStageFt: 10
   },
   {
     id: '08166140',
@@ -37,7 +37,7 @@ export const GAUGES = [
     lng: -99.1403,
     order: 4,
     noaaSlug: 'KRVT2',
-    floodStageFt: null
+    floodStageFt: 9
   },
   {
     id: '08166250',
@@ -57,7 +57,7 @@ export const GAUGES = [
     lng: -98.9070,
     order: 6,
     noaaSlug: 'CMFT2',
-    floodStageFt: null
+    floodStageFt: 26
   }
 ]
 
