@@ -1,6 +1,7 @@
 const USGS_STAGE_PARAMETER = '00065'
 const USGS_FLOW_PARAMETER = '00060'
 const INVALID_VALUE_FLOOR = -900000
+const CHUNK_SIZE = 8
 
 function numericValue(reading) {
   const value = Number(reading?.value)
@@ -16,15 +17,30 @@ function latestReading(values) {
   return sorted[sorted.length - 1]
 }
 
-export async function fetchUSGSGauges(ids) {
-  if (!Array.isArray(ids) || ids.length === 0) return {}
+function chunkIds(ids) {
+  const unique = [...new Set(ids)].filter(Boolean)
+  const chunks = []
+  for (let i = 0; i < unique.length; i += CHUNK_SIZE) {
+    chunks.push(unique.slice(i, i + CHUNK_SIZE))
+  }
+  return chunks
+}
 
-  const siteList = [...new Set(ids)].join(',')
+function mergeGaugeData(target, source) {
+  for (const [site, data] of Object.entries(source)) {
+    target[site] = { ...(target[site] || {}), ...data }
+  }
+  return target
+}
+
+async function fetchUSGSChunk(ids) {
+  const siteList = ids.join(',')
   const url = `https://waterservices.usgs.gov/nwis/iv/?format=json&sites=${siteList}&parameterCd=${USGS_STAGE_PARAMETER},${USGS_FLOW_PARAMETER}&period=PT6H&siteStatus=all`
   const res = await fetch(url)
 
   if (!res.ok) {
-    throw new Error(`USGS request failed with ${res.status}`)
+    console.warn(`USGS request failed with ${res.status} for sites ${siteList}`)
+    return {}
   }
 
   const json = await res.json()
@@ -52,6 +68,7 @@ export async function fetchUSGSGauges(ids) {
         site,
         siteName,
         history: [],
+        flowHistory: [],
         parameterTimes: {},
         source: 'USGS Instantaneous Values'
       }
@@ -81,5 +98,16 @@ export async function fetchUSGSGauges(ids) {
     result[site].time = candidateTimes.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
   })
 
+  return result
+}
+
+export async function fetchUSGSGauges(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return {}
+
+  const result = {}
+  const chunks = chunkIds(ids)
+  const responses = await Promise.all(chunks.map(fetchUSGSChunk))
+
+  responses.forEach(response => mergeGaugeData(result, response))
   return result
 }
