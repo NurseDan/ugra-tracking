@@ -1,36 +1,84 @@
-export async function fetchUSGSGauges(ids) {
-  const url = `https://waterservices.usgs.gov/nwis/iv/?format=json&sites=${ids.join(',')}&parameterCd=00065,00060&period=PT2H`
-  const res = await fetch(url)
-  const json = await res.json()
+const USGS_STAGE_PARAMETER = '00065'
+const USGS_FLOW_PARAMETER = '00060'
+const INVALID_VALUE_FLOOR = -900000
 
+function numericValue(reading) {
+  const value = Number(reading?.value)
+  return Number.isFinite(value) && value > INVALID_VALUE_FLOOR ? value : null
+}
+
+function sortByTime(values) {
+  return [...values].sort((a, b) => new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime())
+}
+
+function latestReading(values) {
+  const sorted = sortByTime(values)
+  return sorted[sorted.length - 1]
+}
+
+export async function fetchUSGSGauges(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return {}
+
+  const siteList = [...new Set(ids)].join(',')
+  const url = `https://waterservices.usgs.gov/nwis/iv/?format=json&sites=${siteList}&parameterCd=${USGS_STAGE_PARAMETER},${USGS_FLOW_PARAMETER}&period=PT6H&siteStatus=all`
+  const res = await fetch(url)
+
+  if (!res.ok) {
+    throw new Error(`USGS request failed with ${res.status}`)
+  }
+
+  const json = await res.json()
+  const timeSeries = json?.value?.timeSeries || []
   const result = {}
 
-  json.value.timeSeries.forEach(ts => {
-    const site = ts.sourceInfo.siteCode[0].value
-    const param = ts.variable.variableCode[0].value
-    const values = ts.values[0].value.filter(v => Number(v.value) > -900000)
+  timeSeries.forEach(ts => {
+    const site = ts?.sourceInfo?.siteCode?.[0]?.value
+    const siteName = ts?.sourceInfo?.siteName
+    const param = ts?.variable?.variableCode?.[0]?.value
+    const rawValues = ts?.values?.[0]?.value || []
+
+    if (!site || !param || rawValues.length === 0) return
+
+    const values = sortByTime(rawValues)
+      .map(v => ({ ...v, numeric: numericValue(v) }))
+      .filter(v => v.numeric !== null)
+
     if (values.length === 0) return
-    
-    const latest = values[values.length - 1]
+
+    const latest = latestReading(values)
 
     if (!result[site]) {
-      result[site] = { history: [] }
+      result[site] = {
+        site,
+        siteName,
+        history: [],
+        parameterTimes: {},
+        source: 'USGS Instantaneous Values'
+      }
     }
 
-    if (param === '00065') {
-      result[site].height = Number(latest.value)
+    result[site].parameterTimes[param] = latest.dateTime
+
+    if (param === USGS_STAGE_PARAMETER) {
+      result[site].height = latest.numeric
+      result[site].heightTime = latest.dateTime
       result[site].history = values.map(v => ({
         time: v.dateTime,
-        height: Number(v.value)
+        height: v.numeric
       }))
     }
-    if (param === '00060') {
-      result[site].flow = Number(latest.value)
+
+    if (param === USGS_FLOW_PARAMETER) {
+      result[site].flow = latest.numeric
+      result[site].flowTime = latest.dateTime
+      result[site].flowHistory = values.map(v => ({
+        time: v.dateTime,
+        flow: v.numeric
+      }))
     }
 
-    if (param === '00065' || !result[site].time) {
-      result[site].time = latest.dateTime
-    }
+    const candidateTimes = [result[site].heightTime, result[site].flowTime].filter(Boolean)
+    result[site].time = candidateTimes.sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0]
   })
 
   return result
