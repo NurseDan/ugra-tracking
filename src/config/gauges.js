@@ -12,7 +12,8 @@ export const GAUGES = [
     noaaSlug: null,
     floodStageFt: null,
     downstreamId: '08165500',
-    downstreamMiles: 1.4
+    downstreamMiles: 1.4,
+    riseModel: { rainfallFactor: 1.1, decayHalfLifeHours: 6, lagHours: 0 }
   },
   {
     id: '08165500',
@@ -27,7 +28,8 @@ export const GAUGES = [
     noaaSlug: 'HNTT2',
     floodStageFt: 10,
     downstreamId: '08166140',
-    downstreamMiles: 8.6
+    downstreamMiles: 8.6,
+    riseModel: { rainfallFactor: 1.0, decayHalfLifeHours: 7, lagHours: 1 }
   },
   {
     id: '08166000',
@@ -42,7 +44,8 @@ export const GAUGES = [
     noaaSlug: null,
     floodStageFt: null,
     downstreamId: '08166140',
-    downstreamMiles: 4.4
+    downstreamMiles: 4.4,
+    riseModel: { rainfallFactor: 1.2, decayHalfLifeHours: 5, lagHours: 0 }
   },
   {
     id: '08166140',
@@ -57,7 +60,8 @@ export const GAUGES = [
     noaaSlug: null,
     floodStageFt: null,
     downstreamId: '08166200',
-    downstreamMiles: 2.4
+    downstreamMiles: 2.4,
+    riseModel: { rainfallFactor: 0.9, decayHalfLifeHours: 9, lagHours: 1 }
   },
   {
     id: '08166200',
@@ -72,7 +76,8 @@ export const GAUGES = [
     noaaSlug: 'KRVT2',
     floodStageFt: 9,
     downstreamId: '08166250',
-    downstreamMiles: 9.2
+    downstreamMiles: 9.2,
+    riseModel: { rainfallFactor: 0.85, decayHalfLifeHours: 10, lagHours: 2 }
   },
   {
     id: '08166250',
@@ -87,7 +92,8 @@ export const GAUGES = [
     noaaSlug: 'CNPT2',
     floodStageFt: null,
     downstreamId: '08167000',
-    downstreamMiles: 9.8
+    downstreamMiles: 9.8,
+    riseModel: { rainfallFactor: 0.7, decayHalfLifeHours: 12, lagHours: 3 }
   },
   {
     id: '08167000',
@@ -102,7 +108,8 @@ export const GAUGES = [
     noaaSlug: 'CMFT2',
     floodStageFt: 26,
     downstreamId: '08167500',
-    downstreamMiles: 27
+    downstreamMiles: 27,
+    riseModel: { rainfallFactor: 0.55, decayHalfLifeHours: 16, lagHours: 4 }
   },
   {
     id: '08167500',
@@ -117,7 +124,8 @@ export const GAUGES = [
     noaaSlug: null,
     floodStageFt: null,
     downstreamId: '08167800',
-    downstreamMiles: 11
+    downstreamMiles: 11,
+    riseModel: { rainfallFactor: 0.45, decayHalfLifeHours: 20, lagHours: 6 }
   },
   {
     id: '08167800',
@@ -132,7 +140,8 @@ export const GAUGES = [
     noaaSlug: null,
     floodStageFt: null,
     downstreamId: '08168500',
-    downstreamMiles: 3
+    downstreamMiles: 3,
+    riseModel: { rainfallFactor: 0.05, decayHalfLifeHours: 240, lagHours: 12, passThrough: true }
   },
   {
     id: '08168500',
@@ -147,7 +156,8 @@ export const GAUGES = [
     noaaSlug: null,
     floodStageFt: null,
     downstreamId: null,
-    downstreamMiles: null
+    downstreamMiles: null,
+    riseModel: { rainfallFactor: 0.4, decayHalfLifeHours: 24, lagHours: 8 }
   },
   {
     id: '08178800',
@@ -162,7 +172,8 @@ export const GAUGES = [
     noaaSlug: null,
     floodStageFt: null,
     downstreamId: null,
-    downstreamMiles: null
+    downstreamMiles: null,
+    riseModel: { rainfallFactor: 0.95, decayHalfLifeHours: 8, lagHours: 1 }
   },
   {
     id: '08195000',
@@ -177,7 +188,8 @@ export const GAUGES = [
     noaaSlug: null,
     floodStageFt: null,
     downstreamId: null,
-    downstreamMiles: null
+    downstreamMiles: null,
+    riseModel: { rainfallFactor: 1.1, decayHalfLifeHours: 6, lagHours: 0 }
   },
   {
     id: '08198000',
@@ -192,7 +204,8 @@ export const GAUGES = [
     noaaSlug: null,
     floodStageFt: null,
     downstreamId: null,
-    downstreamMiles: null
+    downstreamMiles: null,
+    riseModel: { rainfallFactor: 1.15, decayHalfLifeHours: 5, lagHours: 0 }
   },
   {
     id: '08189500',
@@ -207,7 +220,8 @@ export const GAUGES = [
     noaaSlug: null,
     floodStageFt: null,
     downstreamId: null,
-    downstreamMiles: null
+    downstreamMiles: null,
+    riseModel: { rainfallFactor: 1.0, decayHalfLifeHours: 7, lagHours: 1 }
   }
 ]
 

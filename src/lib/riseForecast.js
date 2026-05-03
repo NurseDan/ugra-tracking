@@ -9,6 +9,23 @@ const DECAY_HALF_LIFE_HOURS = 12
 const FORECAST_HOURS = 72
 const CONFIDENCE_BASE = 0.55
 
+const DEFAULT_RISE_MODEL = {
+  rainfallFactor: RAINFALL_RISE_FACTOR,
+  decayHalfLifeHours: DECAY_HALF_LIFE_HOURS,
+  lagHours: 0,
+  passThrough: false
+}
+
+function resolveRiseModel(gauge) {
+  const m = gauge?.riseModel || {}
+  return {
+    rainfallFactor: m.rainfallFactor ?? DEFAULT_RISE_MODEL.rainfallFactor,
+    decayHalfLifeHours: m.decayHalfLifeHours ?? DEFAULT_RISE_MODEL.decayHalfLifeHours,
+    lagHours: m.lagHours ?? DEFAULT_RISE_MODEL.lagHours,
+    passThrough: m.passThrough ?? DEFAULT_RISE_MODEL.passThrough
+  }
+}
+
 const inFlight = new Set()
 
 export function getGaugeConfig(siteId) {
@@ -42,23 +59,43 @@ function computeRecentRiseRate(history, windowHours = 6) {
   return (newest.height - oldest.height) / dtHours
 }
 
-function deterministicForecast({ currentStage, riseRateFtPerHr, qpf, floodStageFt, past24hInches, llmPeak }) {
+function deterministicForecast({ currentStage, riseRateFtPerHr, qpf, floodStageFt, past24hInches, llmPeak, riseModel }) {
   const now = Date.now()
   const points = []
+  const model = riseModel || DEFAULT_RISE_MODEL
+
+  if (model.passThrough) {
+    for (let h = 0; h < FORECAST_HOURS; h++) {
+      const t = new Date(now + h * 3_600_000).toISOString()
+      const decayFactor = Math.pow(0.5, h / model.decayHalfLifeHours)
+      const trendRise = riseRateFtPerHr * decayFactor
+      const prevStage = h === 0 ? currentStage : points[h - 1].stageFt
+      const stageFt = Math.max(0, prevStage + trendRise)
+      const uncertainty = Math.max(0.05, 0.10 * h / 24)
+      points.push({ t, stageFt, low: Math.max(0, stageFt - uncertainty), high: stageFt + uncertainty })
+    }
+    let peak = { stageFt: currentStage, time: new Date(now).toISOString(), category: floodCategory(currentStage, floodStageFt) }
+    for (const p of points) {
+      if (p.stageFt > peak.stageFt) peak = { stageFt: p.stageFt, time: p.t, category: floodCategory(p.stageFt, floodStageFt) }
+    }
+    return { points, peak }
+  }
 
   const pastRainfallBoost = (past24hInches || 0) * PAST_RAINFALL_RISE_FACTOR
+  const lag = Math.max(0, Math.round(model.lagHours || 0))
 
   for (let h = 0; h < FORECAST_HOURS; h++) {
     const t = new Date(now + h * 3_600_000).toISOString()
 
-    const decayFactor = Math.pow(0.5, h / DECAY_HALF_LIFE_HOURS)
+    const decayFactor = Math.pow(0.5, h / model.decayHalfLifeHours)
     const trendRise = riseRateFtPerHr * decayFactor
 
-    const rainfallBucket = qpf && qpf[h] ? qpf[h].inches : 0
-    const rainfallRise = rainfallBucket * RAINFALL_RISE_FACTOR
+    const rainfallSourceIdx = h - lag
+    const rainfallBucket = rainfallSourceIdx >= 0 && qpf && qpf[rainfallSourceIdx] ? qpf[rainfallSourceIdx].inches : 0
+    const rainfallRise = rainfallBucket * model.rainfallFactor
 
     const pastBoostDecay = pastRainfallBoost * Math.pow(0.5, h / 8)
-    const pastBoostHourly = h === 0 ? pastBoostDecay : 0
+    const pastBoostHourly = h === lag ? pastBoostDecay : 0
 
     const deltaH = trendRise + rainfallRise + pastBoostHourly
     const prevStage = h === 0 ? currentStage : points[h - 1].stageFt
@@ -216,7 +253,8 @@ export async function generateRiseForecast(siteId, history, options = {}) {
   const ahpsForecast = options.ahpsForecast || null
   const streamflowForecast = options.streamflowForecast || null
 
-  const det = deterministicForecast({ currentStage, riseRateFtPerHr, qpf, floodStageFt, past24hInches, llmPeak: null })
+  const riseModel = resolveRiseModel(gauge)
+  const det = deterministicForecast({ currentStage, riseRateFtPerHr, qpf, floodStageFt, past24hInches, llmPeak: null, riseModel })
 
   let llmResult = null
   try {
@@ -243,7 +281,8 @@ export async function generateRiseForecast(siteId, history, options = {}) {
       qpf,
       floodStageFt,
       past24hInches,
-      llmPeak: { stageFt: llmResult.peakStageFt }
+      llmPeak: { stageFt: llmResult.peakStageFt },
+      riseModel
     })
     finalPoints = adj.points
     finalPeak = {
