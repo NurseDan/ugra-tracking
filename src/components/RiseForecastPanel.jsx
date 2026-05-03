@@ -20,7 +20,7 @@ function categoryColor(cat) {
   return '#10b981'
 }
 
-function ForecastSvg({ forecast, observedTail, currentStage, floodStageFt }) {
+function ForecastSvg({ forecast, observedTail, currentStage, floodStageFt, ahpsSeries }) {
   const W = 900
   const H = PANEL_H
   const chartW = W - PADDING.left - PADDING.right
@@ -28,11 +28,16 @@ function ForecastSvg({ forecast, observedTail, currentStage, floodStageFt }) {
 
   const forecastPoints = forecast?.points || []
   const tailPoints = observedTail || []
+  const ahpsPoints = (ahpsSeries || [])
+    .filter(p => p && p.stage !== null && p.stage !== undefined && p.t)
+    .map(p => ({ t: p.t, stage: p.stage }))
+    .sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime())
 
   const allStages = [
     ...tailPoints.map(p => p.height).filter(v => v !== null && v !== undefined),
     ...forecastPoints.map(p => p.stageFt),
-    ...forecastPoints.map(p => p.high)
+    ...forecastPoints.map(p => p.high),
+    ...ahpsPoints.map(p => p.stage)
   ]
   if (floodStageFt) allStages.push(floodStageFt)
 
@@ -137,6 +142,24 @@ function ForecastSvg({ forecast, observedTail, currentStage, floodStageFt }) {
           strokeDasharray="6,3" points={fcPoly} />
       )}
 
+      {ahpsPoints.length >= 2 && (() => {
+        const poly = ahpsPoints
+          .map(p => `${xPos(new Date(p.t).getTime()).toFixed(1)},${yPos(p.stage).toFixed(1)}`)
+          .join(' ')
+        return (
+          <g>
+            <polyline fill="none" stroke="#34d399" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+              strokeDasharray="2,4" points={poly} />
+            {ahpsPoints.map((p, i) => {
+              const x = xPos(new Date(p.t).getTime())
+              const y = yPos(p.stage)
+              if (x < PADDING.left || x > PADDING.left + chartW) return null
+              return <circle key={i} cx={x} cy={y} r={2.5} fill="#34d399" stroke="#0f172a" strokeWidth={1} />
+            })}
+          </g>
+        )
+      })()}
+
       {peakX !== null && peakY !== null && peakX >= PADDING.left && peakX <= PADDING.left + chartW && (
         <g>
           <circle cx={peakX} cy={peakY} r={5} fill="#f97316" stroke="#fff" strokeWidth={2} />
@@ -154,7 +177,7 @@ function ForecastSvg({ forecast, observedTail, currentStage, floodStageFt }) {
   )
 }
 
-export default function RiseForecastPanel({ siteId, history, floodStageFt, floodCategories, ahpsForecast, streamflowForecast, initialForecast }) {
+export default function RiseForecastPanel({ siteId, history, floodStageFt, floodCategories, ahpsForecast, ahpsForecastSeries, streamflowForecast, initialForecast }) {
   const [forecast, setForecast] = useState(initialForecast || null)
   const [loading, setLoading] = useState(!initialForecast)
   const [error, setError] = useState(null)
@@ -187,6 +210,23 @@ export default function RiseForecastPanel({ siteId, history, floodStageFt, flood
       generate(false)
     }
   }, [siteId, history?.length])
+
+  const lastOfficialSigRef = useRef(null)
+  React.useEffect(() => {
+    if (!history || history.length === 0) return
+    const sig = JSON.stringify({
+      a: ahpsForecast ? { p: ahpsForecast.peakFt, t: ahpsForecast.peakAt } : null,
+      s: streamflowForecast ? { p: streamflowForecast.peakCfs, t: streamflowForecast.peakAt } : null
+    })
+    if (lastOfficialSigRef.current === null) {
+      lastOfficialSigRef.current = sig
+      return
+    }
+    if (lastOfficialSigRef.current !== sig) {
+      lastOfficialSigRef.current = sig
+      generate(true)
+    }
+  }, [ahpsForecast, streamflowForecast, history?.length])
 
   const catColor = forecast?.peak ? categoryColor(forecast.peak.category) : '#94a3b8'
   const observedTail = history
@@ -283,7 +323,22 @@ export default function RiseForecastPanel({ siteId, history, floodStageFt, flood
             observedTail={observedTail}
             currentStage={observedTail.length ? observedTail[observedTail.length - 1].height : 0}
             floodStageFt={floodStageFt}
+            ahpsSeries={ahpsForecastSeries}
           />
+
+          <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 8, fontSize: '0.7rem', color: '#94a3b8' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 18, height: 2, background: '#60a5fa', display: 'inline-block' }} /> Observed
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 18, height: 0, borderTop: '2px dashed #a78bfa', display: 'inline-block' }} /> Model forecast
+            </span>
+            {ahpsForecastSeries && ahpsForecastSeries.length >= 2 && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ width: 18, height: 0, borderTop: '2px dotted #34d399', display: 'inline-block' }} /> AHPS official
+              </span>
+            )}
+          </div>
 
           <div style={{ marginTop: 16, padding: '12px 16px', background: 'rgba(0,0,0,0.2)', borderRadius: 8 }}>
             <p style={{ color: '#e2e8f0', fontSize: '0.9rem', lineHeight: 1.6, margin: 0 }}>{forecast.narrative}</p>

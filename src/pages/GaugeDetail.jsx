@@ -261,6 +261,7 @@ export default function GaugeDetail() {
             floodStageFt={gaugeConfig.floodStageFt}
             floodCategories={ahpsFloodCategories}
             ahpsForecast={ahpsForecastForEngine}
+            ahpsForecastSeries={ahpsFcArray}
             streamflowForecast={streamflowForecastForEngine}
             initialForecast={null}
           />
