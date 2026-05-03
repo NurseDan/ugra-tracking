@@ -6,7 +6,7 @@ import {
   fetchUSGSCurrent, fetchOpenMeteoForecast, fetchNwsAlerts,
   fetchAhps, fetchNwm, fetchCanyonLake
 } from './sources.js'
-import { calculateRates, getAlertLevel, dispatchIncident, ALERT_LEVELS } from './alertEngine.js'
+import { calculateRates, getAlertLevel, dispatchIncident, dispatchToSubscription, ALERT_LEVELS } from './alertEngine.js'
 
 const STALE_AFTER_MIN = 20
 
@@ -28,7 +28,6 @@ async function persistReadings(siteId, history, flowHistory) {
   if (!history?.length) return
   const flowMap = new Map((flowHistory || []).map(p => [p.time, p.flow]))
   const rows = history.map(p => [siteId, p.time, p.height, flowMap.get(p.time) ?? null, 'usgs_iv'])
-  // Bulk upsert via values list (single statement, parameterized).
   const values = []
   const params = []
   rows.forEach((r, i) => {
@@ -43,6 +42,16 @@ async function persistReadings(siteId, history, flowHistory) {
        SET height_ft = EXCLUDED.height_ft,
            flow_cfs  = COALESCE(EXCLUDED.flow_cfs, gauge_readings.flow_cfs)`,
     params
+  )
+}
+
+async function appendHistory(source, key, payload) {
+  if (!payload) return
+  await query(
+    `INSERT INTO source_history (source, key, observed_at, payload)
+     VALUES ($1, $2, now(), $3)
+     ON CONFLICT (source, key, observed_at) DO NOTHING`,
+    [source, key || '', payload]
   )
 }
 
@@ -63,7 +72,6 @@ async function pollUSGS() {
     const level = getAlertLevel(rates, { isStale: stale })
     const payload = { ...d, rates, alert: level, isStale: stale }
 
-    // Read previous level for escalation detection.
     const prev = await query('SELECT alert_level FROM gauge_status WHERE gauge_id = $1', [g.id])
     const prevLevel = prev.rows[0]?.alert_level || 'GREEN'
 
@@ -105,39 +113,116 @@ async function pollUSGS() {
   console.log(`[poller] usgs done (${Object.keys(data).length} gauges)`)
 }
 
-async function cacheSource(key, fetcher) {
+async function cacheSource(key, fetcher, historySource = null, historyKey = '') {
   try {
     const payload = await fetcher()
-    if (payload === null || payload === undefined) return
+    if (payload === null || payload === undefined) return null
     await query(
       `INSERT INTO source_cache (key, fetched_at, payload) VALUES ($1, now(), $2)
        ON CONFLICT (key) DO UPDATE SET fetched_at = now(), payload = EXCLUDED.payload`,
       [key, payload]
     )
+    if (historySource) await appendHistory(historySource, historyKey, payload)
+    return payload
   } catch (err) {
     console.warn(`[poller] cache ${key} failed:`, err.message)
+    return null
   }
 }
 
 async function pollWeather() {
   for (const g of GAUGES) {
-    await cacheSource(`weather:${g.id}`, () => fetchOpenMeteoForecast(g.lat, g.lng))
+    await cacheSource(`weather:${g.id}`, () => fetchOpenMeteoForecast(g.lat, g.lng), 'weather', g.id)
   }
   console.log('[poller] weather done')
+}
+
+// Track which NWS alert ids we've already dispatched per cycle so we
+// don't re-dispatch the same alert every 2 minutes for the duration of
+// its lifetime. The notifications_sent unique index is the durable
+// guarantee — this is just a fast in-memory short-circuit.
+const nwsDispatchedAlerts = new Set()
+
+async function dispatchNwsAlert(alert) {
+  if (!alert?.id) return
+  // Fast in-memory short-circuit. We DO NOT add to this set until the
+  // subscription loop completes successfully — otherwise a transient DB
+  // error on the first tick would permanently skip this alert. Durable
+  // dedup is enforced by the uq_notifications_dedup_sent partial unique
+  // index, so even if we re-enter this function multiple ticks in a row,
+  // each subscription/channel gets exactly one successful send.
+  if (nwsDispatchedAlerts.has(alert.id)) return
+
+  const ugcs = Array.isArray(alert.ugcCodes) ? alert.ugcCodes : []
+  if (!ugcs.length) {
+    nwsDispatchedAlerts.add(alert.id) // no targets — safe to mark done
+    return
+  }
+
+  // Find subscriptions whose ugc_codes overlap with this alert's UGC list.
+  const subs = await query(
+    `SELECT * FROM alert_subscriptions
+      WHERE enabled = true
+        AND jsonb_array_length(ugc_codes) > 0
+        AND ugc_codes ?| $1::text[]`,
+    [ugcs]
+  )
+  let allSucceeded = true
+  for (const sub of subs.rows) {
+    // Optional event filter: only fire for matching event types.
+    const filter = Array.isArray(sub.nws_event_filter) ? sub.nws_event_filter : []
+    if (filter.length > 0 && !filter.includes(alert.event)) continue
+
+    // Synthesize an incident-shaped record so dispatchToSubscription can
+    // share the same channel pipeline. Use the NWS alert id as the
+    // incident_id so DB-level dedup works across ticks.
+    const fakeIncident = {
+      id: alert.id,
+      gauge_id: 'NWS',
+      gauge_name: alert.headline || alert.event || 'NWS Alert',
+      from_level: null,
+      to_level: alert.severity?.toUpperCase() || 'ORANGE',
+      height_ft: null,
+      flow_cfs: null,
+      occurred_at: alert.effective || new Date().toISOString()
+    }
+    try { await dispatchToSubscription(sub, fakeIncident) }
+    catch (err) {
+      allSucceeded = false
+      console.warn('[poller] nws dispatch failed (will retry next tick):', err.message)
+    }
+  }
+  // Only suppress further attempts when every subscriber dispatch
+  // returned cleanly. dispatchOne already records 'failed' rows for
+  // permanently-failed channels, so retries are bounded by the DB
+  // unique index and channel-level retry budget.
+  if (allSucceeded) nwsDispatchedAlerts.add(alert.id)
 }
 
 async function pollNws() {
   await cacheSource('nws_alerts', async () => {
     const alerts = await fetchNwsAlerts()
     return { alerts, fetchedAt: new Date().toISOString() }
-  })
-  console.log('[poller] nws done')
+  }, 'nws_alerts', '')
+  // Dispatch any new alerts to county subscribers.
+  const cur = await query(`SELECT payload FROM source_cache WHERE key = 'nws_alerts'`)
+  const alerts = cur.rows[0]?.payload?.alerts || []
+  // Trim the in-memory dedup set when alerts expire — keep it bounded.
+  const liveIds = new Set(alerts.map(a => a.id))
+  for (const id of nwsDispatchedAlerts) {
+    if (!liveIds.has(id)) nwsDispatchedAlerts.delete(id)
+  }
+  for (const a of alerts) {
+    try { await dispatchNwsAlert(a) }
+    catch (err) { console.warn('[poller] nws dispatch err:', err.message) }
+  }
+  console.log(`[poller] nws done (${alerts.length} active)`)
 }
 
 async function pollAhps() {
   for (const [siteId, lid] of Object.entries(AHPS_LIDS)) {
     if (!lid) continue
-    await cacheSource(`ahps:${siteId}`, () => fetchAhps(lid))
+    await cacheSource(`ahps:${siteId}`, () => fetchAhps(lid), 'ahps', siteId)
   }
   console.log('[poller] ahps done')
 }
@@ -145,25 +230,21 @@ async function pollAhps() {
 async function pollNwm() {
   for (const [siteId, reach] of Object.entries(NWM_REACHES)) {
     if (!reach) continue
-    await cacheSource(`nwm:${siteId}`, () => fetchNwm(reach))
+    await cacheSource(`nwm:${siteId}`, () => fetchNwm(reach), 'nwm', siteId)
   }
   console.log('[poller] nwm done')
 }
 
 async function pollCanyonLake() {
-  await cacheSource('canyon_lake', () => fetchCanyonLake())
+  await cacheSource('canyon_lake', () => fetchCanyonLake(), 'canyon_lake', '')
   console.log('[poller] canyon lake done')
 }
 
-// Per-task isolation: one source failing must not kill the others.
 async function safe(name, fn) {
   try { await fn() }
   catch (err) { console.error(`[poller] ${name} failed:`, err?.message || err) }
 }
 
-// Reentrancy guard: long-running ticks must not overlap. setInterval can
-// fire again while a previous tick is still mid-flight (e.g. AHPS for
-// many gauges), which would otherwise duplicate incident creation.
 let tickInFlight = false
 async function tick() {
   if (tickInFlight) return
@@ -185,9 +266,10 @@ async function runRetention() {
   const cutoff = new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000).toISOString()
   const r1 = await query(`DELETE FROM gauge_readings WHERE observed_at < $1`, [cutoff])
   const r2 = await query(`DELETE FROM incidents WHERE occurred_at < $1`, [cutoff])
-  const r3 = await query(`DELETE FROM notifications_sent WHERE sent_at < now() - interval '90 days'`)
-  const r4 = await query(`DELETE FROM sessions WHERE expire < now()`)
-  console.log(`[poller] retention: readings=${r1.rowCount} incidents=${r2.rowCount} notifs=${r3.rowCount} sessions=${r4.rowCount}`)
+  const r3 = await query(`DELETE FROM source_history WHERE observed_at < $1`, [cutoff])
+  const r4 = await query(`DELETE FROM notifications_sent WHERE sent_at < now() - interval '90 days'`)
+  const r5 = await query(`DELETE FROM sessions WHERE expire < now()`)
+  console.log(`[poller] retention: readings=${r1.rowCount} incidents=${r2.rowCount} source_history=${r3.rowCount} notifs=${r4.rowCount} sessions=${r5.rowCount}`)
 }
 
 let started = false
@@ -195,7 +277,6 @@ export function startPoller() {
   if (started) return
   started = true
   console.log('[poller] starting scheduler')
-  // Kick off immediately so the dashboard has data on first request.
   tick()
   setInterval(tick, 60_000)
 }

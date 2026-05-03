@@ -95,7 +95,28 @@ function statesForBbox(bbox) {
 // The NWS /alerts/active endpoint does not support an arbitrary bbox query
 // parameter. We narrow server-side using the `area` (state) param derived from
 // the bbox, then post-filter the returned alert polygons against the bbox.
+async function fetchActiveAlertsFromServer(signal) {
+  try {
+    const res = await fetch('/api/source/nws_alerts', { credentials: 'same-origin', signal })
+    if (!res.ok) return null
+    const json = await res.json()
+    const alerts = Array.isArray(json?.alerts) ? json.alerts : null
+    if (!alerts) return null
+    return alerts.filter((a) => isFloodRelevantEvent(a.event, a.description))
+  } catch { return null }
+}
+
 export async function fetchActiveAlerts({ bbox, signal, gaugeUgcs = null } = {}) {
+  const cached = await fetchActiveAlertsFromServer(signal)
+  if (cached) {
+    const ugcAllowList = Array.isArray(gaugeUgcs) && gaugeUgcs.length > 0 ? gaugeUgcs : null
+    return cached.filter((a) => {
+      const polygons = extractPolygons(a.geometry)
+      if (polygons.length > 0) return bbox ? alertIntersectsBbox(a, bbox) : true
+      if (!ugcAllowList) return !bbox
+      return Array.isArray(a.ugcCodes) && a.ugcCodes.some((u) => ugcAllowList.includes(u))
+    })
+  }
   const params = new URLSearchParams({ status: 'actual', message_type: 'alert,update' })
   const states = statesForBbox(bbox)
   if (states.length > 0) {

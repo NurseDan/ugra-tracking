@@ -1,4 +1,14 @@
+// Server-first lookup: the poller caches per-gauge forecasts hourly.
+// We only know lat/lng here, so we fall through to direct upstream when
+// the caller didn't pass a gauge id. fetchPrecipitationForecast (below)
+// is gauge-aware and prefers the cache.
 export async function fetchQPF72h(lat, lng) {
+  // Server-first: use the same cached weather payload (poller stores hourly72)
+  // before falling back to a direct Open-Meteo fetch.
+  const cached = await fetchWeatherFromServer(lat, lng).catch(() => null)
+  if (cached && Array.isArray(cached.raw?.hourly72 || null)) {
+    return { hourly: cached.raw.hourly72, past24hInches: cached.past24hInches || 0 }
+  }
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=precipitation,precipitation_probability&timezone=America/Chicago&forecast_days=4&past_days=1`
     const res = await fetch(url)
@@ -38,7 +48,36 @@ export async function fetchQPF72h(lat, lng) {
   }
 }
 
+async function fetchWeatherFromServer(lat, lng) {
+  // The poller caches per-gauge weather under `weather:<gaugeId>`. We don't
+  // know the gauge id here, so we sniff the cache for a key whose payload
+  // matches the requested coordinates closely (within ~0.05deg ~= 3 mi).
+  // The server already standardized the shape, so we just trim to 24h.
+  try {
+    const res = await fetch('/api/gauges', { credentials: 'same-origin' })
+    if (!res.ok) return null
+    const gauges = await res.json()
+    const match = gauges.find(g => Math.abs(g.lat - lat) < 0.05 && Math.abs(g.lng - lng) < 0.05)
+    if (!match) return null
+    const cr = await fetch(`/api/source/weather:${match.id}`, { credentials: 'same-origin' })
+    if (!cr.ok) return null
+    const p = await cr.json()
+    if (!p || typeof p.totalInches !== 'number') return null
+    return {
+      totalInches: p.totalInches,
+      maxHourlyInches: p.maxHourlyInches,
+      hoursWithRain: p.hoursWithRain,
+      maxProbability: p.maxProbability,
+      hourly: Array.isArray(p.hourly) ? p.hourly : [],
+      past24hInches: p.past24hInches || 0,
+      raw: { _source: 'server-cache', hourly72: Array.isArray(p.hourly72) ? p.hourly72 : [] }
+    }
+  } catch { return null }
+}
+
 export async function fetchPrecipitationForecast(lat, lng) {
+  const cached = await fetchWeatherFromServer(lat, lng)
+  if (cached) return cached
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=precipitation,precipitation_probability&timezone=America/Chicago&forecast_days=2`
     const res = await fetch(url)

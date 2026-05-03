@@ -113,13 +113,50 @@ async function fetchUSGSChunk(ids) {
   return result
 }
 
+// Server-first: hit our own /api/gauges/current (which the 24/7 poller
+// keeps fresh every 5 minutes). Fall back to direct USGS only if the
+// server is unreachable or returned no data for the requested ids.
+async function fetchFromServer(ids) {
+  try {
+    const res = await fetch('/api/gauges/current', { credentials: 'same-origin' })
+    if (!res.ok) return null
+    const json = await res.json()
+    const out = {}
+    let any = false
+    for (const id of ids) {
+      const d = json[id]
+      if (!d || !d.time) continue
+      out[id] = {
+        site: id,
+        siteName: d.siteName,
+        height: d.height ?? null,
+        flow: d.flow ?? null,
+        heightTime: d.heightTime || d.time,
+        flowTime: d.flowTime || d.time,
+        time: d.time,
+        history: Array.isArray(d.history) ? d.history : [],
+        flowHistory: Array.isArray(d.flowHistory) ? d.flowHistory : [],
+        parameterTimes: { '00065': d.heightTime || d.time, '00060': d.flowTime || d.time },
+        source: 'Server (USGS via 24/7 poller)'
+      }
+      any = true
+    }
+    return any ? out : null
+  } catch { return null }
+}
+
 export async function fetchUSGSGauges(ids) {
   if (!Array.isArray(ids) || ids.length === 0) return {}
 
-  const result = {}
-  const chunks = chunkIds(ids)
-  const responses = await Promise.all(chunks.map(fetchUSGSChunk))
+  const fromServer = await fetchFromServer(ids)
+  if (fromServer && Object.keys(fromServer).length === [...new Set(ids)].length) {
+    return fromServer
+  }
 
+  const result = fromServer || {}
+  const missing = ids.filter(id => !result[id])
+  const chunks = chunkIds(missing)
+  const responses = await Promise.all(chunks.map(fetchUSGSChunk))
   responses.forEach(response => mergeGaugeData(result, response))
   return result
 }

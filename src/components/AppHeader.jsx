@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { Activity, AlertTriangle, Bell, Clock, History, X } from 'lucide-react'
+import { Activity, AlertTriangle, Bell, Clock, Download, History, X } from 'lucide-react'
 import { ALERT_LEVELS } from '../lib/alertEngine'
 import { formatCDT } from '../lib/formatTime'
 import { GAUGES } from '../config/gauges'
@@ -35,6 +35,9 @@ export default function AppHeader({ highestAlert, lastUpdate }) {
             </NavLink>
             <NavLink to="/my-alerts" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
               <Bell size={14} /> My Alerts
+            </NavLink>
+            <NavLink to="/exports" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
+              <Download size={14} /> Exports
             </NavLink>
             <button
               type="button"

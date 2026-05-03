@@ -142,7 +142,39 @@ function safePercentFull(volume, capacity) {
   return Math.max(0, Math.min(200, (volume / capacity) * 100))
 }
 
+async function fetchCanyonFromServer(signal) {
+  try {
+    const res = await fetch('/api/source/canyon_lake', { credentials: 'same-origin', signal })
+    if (!res.ok) return null
+    const p = await res.json()
+    if (!p || (p.poolElevationFt == null && p.releaseCfs == null && p.inflowCfs == null)) return null
+    return {
+      name: p.name || CANYON_STATIC.name,
+      poolElevationFt: p.poolElevationFt ?? null,
+      percentFull: p.percentFull ?? safePercentFull(p.volumeAcreFt, CANYON_STATIC.conservationCapacityAcreFt),
+      volumeAcreFt: p.volumeAcreFt ?? null,
+      conservationCapacity: CANYON_STATIC.conservationCapacityAcreFt,
+      conservationPoolElevationFt: p.conservationPoolElevationFt ?? CANYON_STATIC.conservationPoolElevationFt,
+      floodCapacity: CANYON_STATIC.floodCapacityAcreFt,
+      floodPoolElevationFt: p.floodPoolElevationFt ?? CANYON_STATIC.floodPoolElevationFt,
+      deadPoolElevationFt: CANYON_STATIC.deadPoolElevationFt,
+      releaseCfs: p.releaseCfs ?? null,
+      releaseSiteName: CANYON_STATIC.damSiteName,
+      releaseTime: p.releaseTime ?? null,
+      inflowCfs: p.inflowCfs ?? null,
+      inflowSiteName: 'Guadalupe Rv at Spring Branch (USGS 08167500)',
+      inflowTime: p.inflowTime ?? null,
+      updated: p.updated ? new Date(p.updated).getTime() : Date.now(),
+      partial: false,
+      source: 'server-cache',
+      errors: []
+    }
+  } catch { return null }
+}
+
 export async function fetchCanyonLakeStatus({ signal } = {}) {
+  const cached = await fetchCanyonFromServer(signal)
+  if (cached) return cached
   const errors = []
   const results = await Promise.allSettled([
     fetchTwdbCanyon(signal),

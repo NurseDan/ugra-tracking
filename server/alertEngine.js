@@ -45,11 +45,25 @@ function meetsMinLevel(level, minLevel) {
   return (ALERT_LEVELS[level]?.priority ?? 0) >= (ALERT_LEVELS[minLevel]?.priority ?? 0)
 }
 
-// Single-subscription dispatch with idempotent dedup. We rely on the
-// uq_notifications_dedup_sent partial unique index for atomic dedup —
-// the SELECT-then-INSERT pattern was racy under concurrent ticks.
+// Errors that look transient (network blips, upstream 5xx, push 429s)
+// are worth retrying. Anything else (bad config, validation, 4xx) is
+// recorded as a permanent failure on the first attempt.
+function isTransient(err) {
+  const m = String(err?.message || err).toLowerCase()
+  if (/timeout|aborted|econnreset|enotfound|eai_again|network/.test(m)) return true
+  if (/http\s*5\d\d/.test(m)) return true
+  if (/429|too many/.test(m)) return true
+  return false
+}
+
+const MAX_ATTEMPTS = 3
+const BASE_BACKOFF_MS = 500
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+
+// Single-subscription dispatch with idempotent dedup and bounded retry.
+// We rely on the uq_notifications_dedup_sent partial unique index for
+// atomic dedup so concurrent ticks can't double-send.
 async function dispatchOne(sub, incident, channel) {
-  // Pre-check: if a successful send already exists, skip.
   const dup = await query(
     `SELECT 1 FROM notifications_sent
       WHERE subscription_id = $1 AND incident_id = $2 AND channel = $3 AND status = 'sent'
@@ -57,27 +71,36 @@ async function dispatchOne(sub, incident, channel) {
     [sub.id, incident.id, channel]
   )
   if (dup.rowCount > 0) return
-  try {
-    if (channel === 'push') await dispatchPush(sub, incident)
-    else if (channel === 'email') await sendAlertEmail(sub, incident)
-    else if (channel === 'webhook') await dispatchWebhook(sub, incident)
-    else if (channel === 'sms') throw new Error('SMS channel requires Twilio connection — not yet configured')
-    else throw new Error(`Unknown channel: ${channel}`)
-    // The unique index makes this insert idempotent: if a parallel
-    // dispatch already wrote the success row, we silently swallow.
-    await query(
-      `INSERT INTO notifications_sent (subscription_id, incident_id, channel, status)
-       VALUES ($1, $2, $3, 'sent')
-       ON CONFLICT DO NOTHING`,
-      [sub.id, incident.id, channel]
-    )
-  } catch (err) {
-    await query(
-      `INSERT INTO notifications_sent (subscription_id, incident_id, channel, status, error)
-       VALUES ($1, $2, $3, 'failed', $4)`,
-      [sub.id, incident.id, channel, String(err?.message || err).slice(0, 500)]
-    )
+
+  let lastErr = null
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    try {
+      if (channel === 'push') await dispatchPush(sub, incident)
+      else if (channel === 'email') await sendAlertEmail(sub, incident)
+      else if (channel === 'webhook') await dispatchWebhook(sub, incident)
+      else if (channel === 'sms') throw new Error('SMS channel requires Twilio connection — not yet configured')
+      else throw new Error(`Unknown channel: ${channel}`)
+      await query(
+        `INSERT INTO notifications_sent (subscription_id, incident_id, channel, status)
+         VALUES ($1, $2, $3, 'sent')
+         ON CONFLICT DO NOTHING`,
+        [sub.id, incident.id, channel]
+      )
+      return
+    } catch (err) {
+      lastErr = err
+      if (attempt < MAX_ATTEMPTS && isTransient(err)) {
+        await sleep(BASE_BACKOFF_MS * 2 ** (attempt - 1))
+        continue
+      }
+      break
+    }
   }
+  await query(
+    `INSERT INTO notifications_sent (subscription_id, incident_id, channel, status, error)
+     VALUES ($1, $2, $3, 'failed', $4)`,
+    [sub.id, incident.id, channel, String(lastErr?.message || lastErr).slice(0, 500)]
+  )
 }
 
 // Dispatch a single subscription on all of its configured channels — used

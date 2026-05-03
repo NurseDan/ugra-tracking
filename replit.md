@@ -209,3 +209,42 @@ persistence, the 72h rise forecast engine, dashboard peak badges, and
 multi-tier flood threshold lines. Task #15 moves the OpenAI API key
 server-side: all LLM calls now go through the Express proxy in `server.js`,
 eliminating the `VITE_OPENAI_API_KEY` credential exposure in the public bundle.
+
+## Task #17 — Always-on backend (24/7 alerts + 5y exports + hybrid auth)
+
+The browser-only architecture has been retired. All upstream APIs (USGS,
+NWS, AHPS/NWPS, NWM, Open-Meteo, TWDB) are now polled server-side on
+fixed schedules: USGS every 5 min, NWS every 2 min, AHPS/NWM every 15
+min, weather hourly, Canyon Lake every 30 min. Five years of every
+fetched payload are persisted (per-row in `gauge_readings` for USGS, in
+the tall `source_history` table for everything else). A daily retention
+sweep prunes anything older than 5 years.
+
+Alerting runs entirely on the server. The scheduler diffs each gauge
+status snapshot against the previous tick, persists incident rows on
+escalations, and dispatches to every matching `alert_subscriptions` row
+(by gauge id and/or NWS UGC county/zone code). Channels supported:
+web push (VAPID), email (Replit Mail), HMAC-signed webhook (with SSRF
+guard rejecting private/loopback/link-local addresses), and SMS
+(stubbed — recorded as failed pending a Twilio connector). Each
+dispatch is retried up to 3 times with exponential backoff for
+transient failures, and dedup is enforced atomically by a partial
+unique index over `(subscription_id, incident_id, channel)`.
+
+Authentication is hybrid: the dashboard, incident log, and exports stay
+fully public; only `/my-alerts` requires a Replit OIDC sign-in. The
+`/exports` page exposes CSV/JSON download links for every source with a
+date-range or quick-period selector. The `/my-alerts` page lists
+subscriptions, supports gauge + UGC + NWS event filters, and shows a
+delivery history table for the signed-in user.
+
+### Deployment (Reserved VM)
+
+The application is a single Node process — `node server.js` listens on
+`PORT` (3001 in dev) and serves both the `/api/*` routes and the
+prebuilt SPA from `dist/`. For Reserved VM deployment, set the build
+command to `vite build` and the run command to `node server.js`. The
+required secrets are `DATABASE_URL`, `SESSION_SECRET`, `REPL_ID`, and
+`REPLIT_DOMAINS`; the poller and VAPID keys auto-bootstrap on first
+start. Reserved VM is the right tier because the poller must run
+continuously regardless of inbound traffic.

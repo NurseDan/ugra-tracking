@@ -60,18 +60,37 @@ CREATE TABLE IF NOT EXISTS incidents (
 CREATE INDEX IF NOT EXISTS idx_incidents_occurred ON incidents(occurred_at desc);
 CREATE INDEX IF NOT EXISTS idx_incidents_gauge ON incidents(gauge_id, occurred_at desc);
 
--- Per-source snapshot caches.
+-- Per-source snapshot caches (latest payload only — fast dashboard reads).
 CREATE TABLE IF NOT EXISTS source_cache (
   key         text primary key,           -- e.g. 'nws_alerts', 'ahps:HNTT2', 'nwm:3586192', 'canyon_lake', 'weather:08165500'
   fetched_at  timestamptz default now(),
   payload     jsonb not null
 );
 
--- User alert subscriptions. user_id null = anonymous (for public push subs only).
+-- Tall append-only history table covering every upstream source the
+-- poller touches (USGS readings live in their own table). Each row is
+-- one fetched payload, retained for five years by the daily retention
+-- sweep. (source, key, observed_at) is unique so re-fetching the same
+-- snapshot is idempotent.
+CREATE TABLE IF NOT EXISTS source_history (
+  source      text not null,              -- 'nws_alerts' | 'ahps' | 'nwm' | 'weather' | 'canyon_lake'
+  key         text not null default '',   -- '' for global sources, otherwise gauge id / lid / reach
+  observed_at timestamptz not null,
+  payload     jsonb not null,
+  primary key (source, key, observed_at)
+);
+CREATE INDEX IF NOT EXISTS idx_source_history_observed
+  ON source_history(source, observed_at desc);
+
+-- User alert subscriptions.
+-- A subscription can target either a gauge (gauge_id) or a NWS county/zone
+-- (ugc_codes), or both. Channels jsonb lists the requested delivery methods.
 CREATE TABLE IF NOT EXISTS alert_subscriptions (
   id              uuid primary key default gen_random_uuid(),
   user_id         text references users(id) on delete cascade,
-  gauge_id        text,                    -- null = all gauges
+  gauge_id        text,                    -- null = all gauges (when not a county sub)
+  ugc_codes       jsonb not null default '[]'::jsonb, -- e.g. ['TXC265','TXC031'] — NWS UGC county/zone codes
+  nws_event_filter jsonb not null default '[]'::jsonb, -- restrict NWS dispatch to specific events; [] = all
   min_level       text not null default 'ORANGE',
   channels        jsonb not null default '[]'::jsonb,    -- ['push','email','sms','webhook']
   email           text,
@@ -84,6 +103,8 @@ CREATE TABLE IF NOT EXISTS alert_subscriptions (
   enabled         boolean not null default true,
   created_at      timestamptz default now()
 );
+ALTER TABLE alert_subscriptions ADD COLUMN IF NOT EXISTS ugc_codes jsonb not null default '[]'::jsonb;
+ALTER TABLE alert_subscriptions ADD COLUMN IF NOT EXISTS nws_event_filter jsonb not null default '[]'::jsonb;
 CREATE INDEX IF NOT EXISTS idx_alert_subs_user ON alert_subscriptions(user_id);
 CREATE INDEX IF NOT EXISTS idx_alert_subs_gauge ON alert_subscriptions(gauge_id);
 
@@ -91,12 +112,18 @@ CREATE INDEX IF NOT EXISTS idx_alert_subs_gauge ON alert_subscriptions(gauge_id)
 CREATE TABLE IF NOT EXISTS notifications_sent (
   id              uuid primary key default gen_random_uuid(),
   subscription_id uuid references alert_subscriptions(id) on delete cascade,
-  incident_id     uuid,
+  -- text rather than uuid: in addition to internal `incidents.id` (uuid)
+  -- this column also stores opaque external IDs (e.g. NWS alert URIs)
+  -- used for cross-tick dedup of source-driven (non-incident) dispatches.
+  incident_id     text,
   channel         text not null,
   status          text not null,           -- 'sent' | 'failed' | 'dedup'
   error           text,
   sent_at         timestamptz default now()
 );
+-- Migrate older deployments that created the column as uuid.
+ALTER TABLE notifications_sent
+  ALTER COLUMN incident_id TYPE text USING incident_id::text;
 CREATE INDEX IF NOT EXISTS idx_notifications_sent ON notifications_sent(sent_at desc);
 CREATE INDEX IF NOT EXISTS idx_notifications_dedup ON notifications_sent(subscription_id, incident_id);
 -- Hard idempotency guarantee for dispatch dedup: at most one
