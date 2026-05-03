@@ -20,7 +20,7 @@
  *     Iowa Mesonet, Canyon Lake). Capped to keep storage small on iOS.
  */
 
-const VERSION = 'v2'
+const VERSION = 'v3'
 const SHELL_CACHE = `gs-shell-${VERSION}`
 const DATA_CACHE = `gs-data-${VERSION}`
 
@@ -35,16 +35,26 @@ const PRECACHE_URLS = [
 ]
 
 const RUNTIME_HOSTS = new Set([
+  // USGS / NOAA / NWS
   'waterservices.usgs.gov',
   'api.weather.gov',
   'api.water.noaa.gov',
   'water.weather.gov',
   'nwmdata.nationalwaterprediction.noaa.gov',
+  // Forecast / weather
   'api.open-meteo.com',
   'flood-api.open-meteo.com',
+  // Radar / tiles
   'api.rainviewer.com',
   'mesonet.agron.iastate.edu',
-  'server.arcgisonline.com'
+  'server.arcgisonline.com',
+  // Reservoir (Canyon Lake / TWDB) + CORS proxies the app falls back to
+  'www.waterdatafortexas.org',
+  'waterdatafortexas.org',
+  'corsproxy.io',
+  'api.allorigins.win',
+  // Optional AI briefing
+  'api.openai.com'
 ])
 
 const RUNTIME_HOST_SUFFIXES = ['.rainviewer.com', '.tile.openstreetmap.org']
@@ -68,11 +78,51 @@ async function trimCache(cacheName, max) {
   }
 }
 
+// Parse the served index.html for hashed asset URLs (Vite emits
+// /assets/index-<hash>.js + /assets/index-<hash>.css). Returning the
+// referenced same-origin assets lets us precache them at install time
+// so the very first offline launch from the home-screen icon works,
+// not just subsequent launches after they've been lazily cached.
+async function discoverShellAssets() {
+  try {
+    const res = await fetch('/', { cache: 'no-store' })
+    if (!res || !res.ok) return []
+    const html = await res.text()
+    const urls = new Set()
+    const re = /(?:href|src)\s*=\s*["']([^"']+)["']/gi
+    let m
+    while ((m = re.exec(html)) !== null) {
+      const raw = m[1]
+      if (!raw || raw.startsWith('data:') || raw.startsWith('#')) continue
+      try {
+        const u = new URL(raw, self.location.origin)
+        if (u.origin !== self.location.origin) continue
+        if (/\.(js|mjs|css|woff2?|ttf|svg|png|webp|ico)(\?|$)/i.test(u.pathname)) {
+          urls.add(u.pathname + u.search)
+        }
+      } catch { /* ignore */ }
+    }
+    return [...urls]
+  } catch {
+    return []
+  }
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL_CACHE)
       await cache.addAll(PRECACHE_URLS).catch(() => {})
+      const assets = await discoverShellAssets()
+      if (assets.length) {
+        await Promise.all(
+          assets.map((u) =>
+            fetch(u)
+              .then((r) => (r && r.status === 200 ? cache.put(u, r.clone()) : null))
+              .catch(() => null)
+          )
+        )
+      }
       self.skipWaiting()
     })()
   )
