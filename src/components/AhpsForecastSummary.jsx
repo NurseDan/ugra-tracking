@@ -57,7 +57,11 @@ export default function AhpsForecastSummary({ gauge, compact = false, className 
   }
 
   const crest = next24hCrest(forecast, floodCategories)
-  const peakCat = highestForecastCategory(forecast, floodCategories)
+  // Align category window with the 24h crest window so the badge label
+  // matches what the user sees in the headline.
+  const peakCat = highestForecastCategory(forecast, floodCategories, {
+    withinMs: 24 * 60 * 60 * 1000
+  })
 
   if (!crest) {
     return (
@@ -75,7 +79,7 @@ export default function AhpsForecastSummary({ gauge, compact = false, className 
   return (
     <span
       className={`ahps-summary ${compact ? 'ahps-summary--compact' : ''} ${className}`.trim()}
-      title={`Highest forecast category in window: ${catLabel}`}
+      title={`Highest forecast category in next 24h: ${catLabel}`}
     >
       <span className="ahps-summary__label">AHPS Crest</span>
       <span className="ahps-summary__crest">

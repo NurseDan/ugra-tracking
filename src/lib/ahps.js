@@ -190,11 +190,16 @@ export function next24hCrest(forecast, categories, now = Date.now()) {
   }
 }
 
-export function highestForecastCategory(forecast, categories) {
+export function highestForecastCategory(forecast, categories, { withinMs = null, now = Date.now() } = {}) {
   if (!Array.isArray(forecast) || forecast.length === 0) return null
   const ranks = { action: 1, minor: 2, moderate: 3, major: 4 }
+  const horizon = withinMs ? now + withinMs : null
   let best = null
   for (const p of forecast) {
+    if (horizon !== null) {
+      const tt = new Date(p.t).getTime()
+      if (!Number.isFinite(tt) || tt < now || tt > horizon) continue
+    }
     const c = categoryForStage(p.stage, categories)
     if (!c) continue
     if (!best || ranks[c] > ranks[best]) best = c

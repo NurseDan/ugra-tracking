@@ -17,12 +17,12 @@ export const AHPS_LIDS = Object.freeze({
   '08166200': 'KRRT2', // Guadalupe River at Kerrville (was incorrectly KRVT2)
   '08168500': 'NBRT2', // Guadalupe River above Comal River at New Braunfels
 
-  // Likely-correct legacy slugs from gauges.js. The fetch layer will
-  // gracefully degrade to a "no AHPS data" state if NWPS rejects them.
-  '08166250': 'CNPT2', // Center Point
-  '08167000': 'CMFT2', // Comfort
-
   // Known to have no NWS forecast point
+  // (probed against NWPS during build — no matching LID in the active
+  // forecast point list; legacy gauges.js noaaSlug values for these
+  // were never valid NWPS LIDs)
+  '08166250': null, // Center Point
+  '08167000': null, // Comfort
   '08165300': null, // North Fork near Hunt (headwater)
   '08166000': null, // Johnson Creek near Ingram (tributary)
   '08166140': null, // Above Bear Creek at Kerrville
