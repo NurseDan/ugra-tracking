@@ -62,13 +62,21 @@ export function useAlertNotifier(gaugesData, nwsAlerts, options = {}) {
     initializedRef.current = true
   }, [gaugesData, gauges, enabled])
 
+  const alertsArray = Array.isArray(nwsAlerts)
+    ? nwsAlerts
+    : Array.isArray(nwsAlerts?.alerts)
+      ? nwsAlerts.alerts
+      : Array.isArray(nwsAlerts?.data)
+        ? nwsAlerts.data
+        : null
+
   useEffect(() => {
-    if (!enabled || !isSupported() || !Array.isArray(nwsAlerts) || !isNwsAlertsEnabled()) return
+    if (!enabled || !isSupported() || !alertsArray || !isNwsAlertsEnabled()) return
 
     const subscribed = (gauges || []).filter((g) => isSubscribedToGauge(g.id))
     if (!subscribed.length) return
 
-    nwsAlerts.forEach((alert) => {
+    alertsArray.forEach((alert) => {
       const id = alert?.id || alert?.identifier
       if (!id || seenAlertIds.current.has(id)) return
       seenAlertIds.current.add(id)
@@ -82,7 +90,7 @@ export function useAlertNotifier(gaugesData, nwsAlerts, options = {}) {
       const arr = Array.from(seenAlertIds.current)
       seenAlertIds.current = new Set(arr.slice(-100))
     }
-  }, [nwsAlerts, gauges, enabled])
+  }, [alertsArray, gauges, enabled])
 }
 
 export default useAlertNotifier
