@@ -3,15 +3,6 @@ import { ALERT_LEVELS } from './alertEngine'
 const DEFAULT_MODEL = 'gpt-4o-mini'
 const OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions'
 
-// SECURITY NOTE: This module currently calls OpenAI directly from the browser
-// using import.meta.env.VITE_OPENAI_API_KEY. Any VITE_-prefixed env var is
-// inlined into the public bundle, so the key is visible to anyone loading the
-// site. This matches the existing app pattern (all current API calls are
-// browser-side), but for production deployment the LLM call should be moved
-// behind a server proxy. Swap the provider via setDefaultProvider() with a
-// new chatJson() implementation that POSTs to your backend — no other code
-// needs to change.
-
 export const RISK_LEVELS = ['low', 'watch', 'warning', 'critical']
 
 const GAUGE_SCHEMA = {
@@ -69,7 +60,7 @@ Rules:
 - Keep summary <= 320 characters; headline <= 80 characters.
 - Output MUST be valid JSON matching the requested schema.`
 
-function unavailable(reason = 'AI briefing unavailable — add an OpenAI key in Secrets') {
+function unavailable(reason = 'AI briefing unavailable — add OPENAI_API_KEY to server secrets') {
   return {
     riskLevel: 'low',
     headline: 'AI briefing unavailable',
@@ -82,21 +73,58 @@ function unavailable(reason = 'AI briefing unavailable — add an OpenAI key in 
   }
 }
 
-function getApiKey() {
-  try {
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-      return import.meta.env.VITE_OPENAI_API_KEY || null
+export function createProxyProvider(options = {}) {
+  const {
+    endpoint = '/api/chat',
+    model = DEFAULT_MODEL,
+    fetchImpl = (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : null)
+  } = options
+
+  return {
+    name: 'proxy',
+    hasKey: true,
+    async chatJson({ system, user, schema, schemaName = 'briefing', signal }) {
+      if (!fetchImpl) {
+        throw new Error('No fetch implementation available')
+      }
+      const res = await fetchImpl(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ system, user, schema, schemaName, model }),
+        signal
+      })
+      if (res.status === 503) {
+        const err = new Error('OpenAI API key not configured on server')
+        err.code = 'missing_key'
+        throw err
+      }
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        const err = new Error(`Proxy request failed: ${res.status} ${text.slice(0, 200)}`)
+        err.code = 'provider_error'
+        err.status = res.status
+        throw err
+      }
+      const json = await res.json()
+      const content = json?.choices?.[0]?.message?.content
+      if (!content) {
+        throw new Error('Empty response from proxy')
+      }
+      try {
+        return JSON.parse(content)
+      } catch (e) {
+        const err = new Error('Proxy returned invalid JSON')
+        err.code = 'parse_error'
+        err.raw = content
+        throw err
+      }
     }
-  } catch {}
-  if (typeof process !== 'undefined' && process.env) {
-    return process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY || null
   }
-  return null
 }
 
 export function createOpenAiProvider(options = {}) {
   const {
-    apiKey = getApiKey(),
+    apiKey,
     model = DEFAULT_MODEL,
     endpoint = OPENAI_ENDPOINT,
     fetchImpl = (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : null)
@@ -165,7 +193,7 @@ export function createOpenAiProvider(options = {}) {
 
 let defaultProvider = null
 export function getDefaultProvider() {
-  if (!defaultProvider) defaultProvider = createOpenAiProvider()
+  if (!defaultProvider) defaultProvider = createProxyProvider()
   return defaultProvider
 }
 export function setDefaultProvider(provider) {

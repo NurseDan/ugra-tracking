@@ -8,6 +8,7 @@ briefing for the basin and per-gauge, and a 72-hour AI-assisted rise forecast pe
 ## Tech Stack
 
 - **Frontend**: React 18, Vite 6, React Router 7
+- **Backend**: Express (API proxy server on port 3001)
 - **Mapping**: Leaflet / React-Leaflet with Nexrad radar overlay
 - **Icons**: Lucide-React
 - **Data Sources**:
@@ -15,11 +16,16 @@ briefing for the basin and per-gauge, and a 72-hour AI-assisted rise forecast pe
   - Open-Meteo (precipitation forecast, QPF 72h)
   - NWS / AHPS (flood alerts, official stage forecasts)
   - National Water Model (streamflow forecasts)
-  - OpenAI (AI briefings and rise forecast narratives)
+  - OpenAI (AI briefings and rise forecast narratives, via server-side proxy)
 
 ## Architecture
 
 ```
+server.js                           Express API proxy (port 3001).
+                                    Reads OPENAI_API_KEY from server env
+                                    and forwards /api/chat requests to
+                                    OpenAI. The key never reaches the browser.
+
 src/
   App.jsx                       Top-level data poller (USGS + weather), router,
                                 wraps everything in <SentinelProvider>. Also
@@ -74,7 +80,9 @@ src/
     alertEngine.js, surgeEngine.js, alertColors.js
     nwsAlerts.js                api.weather.gov client + alert normalizer.
     ahps.js, nwm.js, openMeteoFlood.js, canyonLake.js
-    aiBriefing.js               OpenAI-backed briefing generator (browser).
+    aiBriefing.js               Briefing generator. Uses createProxyProvider() by default,
+                                which POSTs to /api/chat (server-side proxy) so the
+                                OpenAI key is never exposed in the browser bundle.
     riseForecast.js             72h rise forecast engine (deterministic + LLM, AHPS/NWM fusion).
     gaugeHistory.js             IndexedDB/localStorage 14-day history persistence + forecast TTL cache.
     radarLayers.js              RainViewer + MRMS tile/WMS helpers.
@@ -111,7 +119,7 @@ src/
 - **Forecast caching**: 15-minute TTL per gauge in localStorage, refreshed on visibility change
 - **Dashboard peak badges**: Next 24h peak stage from cached forecast shown on each gauge card
 - **Multi-tier flood thresholds**: Action/Minor/Moderate/Major lines on history chart (from AHPS or derived)
-- **AI briefings**: Per-gauge and basin-wide risk narratives via OpenAI (requires VITE_OPENAI_API_KEY)
+- **AI briefings**: Per-gauge and basin-wide risk narratives via OpenAI (server-side proxy, requires OPENAI_API_KEY in Secrets)
 - **Official forecasts**: AHPS stage and NWM streamflow overlays on gauge detail
 - **NWS alerts**: Real-time NWS alerts matched to gauges, dismissable banner on dashboard
 - **Notifications**: Per-gauge browser push notifications on alert escalation
@@ -123,13 +131,12 @@ src/
 
 | Variable | Purpose | Required? |
 | --- | --- | --- |
-| `VITE_OPENAI_API_KEY` | Powers the basin + per-gauge AI briefings and LLM-assisted rise forecast narratives. If missing, briefings and LLM forecasts degrade gracefully. | Optional |
+| `OPENAI_API_KEY` | Powers the basin + per-gauge AI briefings and LLM-assisted rise forecast narratives via the server-side proxy (`server.js`). The key is read only by the Express server and never sent to the browser. If missing, briefings and LLM forecasts degrade gracefully. | Optional |
 
-> **Security note:** any `VITE_`-prefixed env var is inlined into the public
-> JS bundle. The current `aiBriefing.js` calls OpenAI directly from the
-> browser to match the rest of the app's all-client-side data fetching. For
-> a production deployment, replace `createOpenAiProvider` with a thin server
-> proxy so the key stays private.
+> **Security:** `OPENAI_API_KEY` is a plain (non-`VITE_`-prefixed) env var, so
+> Vite never inlines it into the public JS bundle. All OpenAI calls go through
+> the `/api/chat` Express proxy endpoint in `server.js`, which holds the key
+> server-side only. The browser bundle contains no credentials.
 
 No other API keys are required — USGS, NWS, NOAA NWM, RainViewer, MRMS
 (Iowa Mesonet WMS), Open-Meteo, and AHPS are all public anonymous APIs.
@@ -143,8 +150,9 @@ specific gauge or globally to NWS alerts in the header notifications panel.
 
 ## Build / run
 
-- `npm run dev` — Vite dev server on port 5000.
+- `npm run dev` — starts Express API proxy (port 3001) + Vite dev server (port 5000).
 - `npm run build` — production build to `dist/`.
+- `npm run server` — run the Express proxy server only (for production alongside a static host).
 
 ## PWA / iOS install
 
@@ -198,4 +206,6 @@ the per-gauge AI briefing + AHPS + NWM panels in `GaugeDetail`, the per-gauge
 NWS alert pill on `Dashboard`, and replacing the static NEXRAD overlay with
 the animated radar + MRMS controls on the map. Task #10 adds 14-day history
 persistence, the 72h rise forecast engine, dashboard peak badges, and
-multi-tier flood threshold lines.
+multi-tier flood threshold lines. Task #15 moves the OpenAI API key
+server-side: all LLM calls now go through the Express proxy in `server.js`,
+eliminating the `VITE_OPENAI_API_KEY` credential exposure in the public bundle.
