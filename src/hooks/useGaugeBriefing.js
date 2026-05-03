@@ -110,11 +110,15 @@ export function useBasinBriefing(contexts, briefings = {}, options = {}) {
   const abortRef = useRef(null)
   const debounceRef = useRef(null)
 
+  const briefingsDigest = Object.keys(briefings || {})
+    .sort()
+    .map((k) => `${k}=${briefings[k]?.riskLevel || 'N'}/${(briefings[k]?.headline || '').slice(0, 24)}`)
+    .join(',')
   const fingerprint =
-    (contexts || [])
+    ((contexts || [])
       .filter(Boolean)
       .map((c) => `${c.gauge.id}:${c.current?.alertLevel || 'N'}:${c.current?.heightFt ?? '-'}`)
-      .join('|') || 'empty'
+      .join('|') || 'empty') + '||' + briefingsDigest
 
   const run = useCallback(
     async (force = false) => {
