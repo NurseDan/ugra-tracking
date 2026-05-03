@@ -125,13 +125,13 @@ export function saveForecastCache(siteId, forecast) {
   } catch {}
 }
 
-export function loadForecastCache(siteId) {
+export function loadForecastCache(siteId, { allowStale = false } = {}) {
   try {
     const key = `sentinel_forecast_${siteId}`
     const raw = localStorage.getItem(key)
     if (!raw) return null
     const { forecast, savedAt } = JSON.parse(raw)
-    if (Date.now() - savedAt > FORECAST_TTL_MS) return null
+    if (!allowStale && Date.now() - savedAt > FORECAST_TTL_MS) return null
     return forecast
   } catch {
     return null

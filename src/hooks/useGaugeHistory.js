@@ -33,10 +33,14 @@ export function useGaugeHistory(siteId) {
         const merged = await getHistory(siteId)
         setHistory(merged)
         setLastFetched(new Date())
+      } else if (cached.length === 0) {
+        setError('No history available (offline or upstream unavailable).')
       }
     } catch (err) {
-      console.error(`[useGaugeHistory] Failed to fetch history for ${siteId}:`, err)
-      setError(err?.message || 'Failed to load history')
+      console.warn(`[useGaugeHistory] Failed to fetch history for ${siteId}:`, err)
+      if (cached.length === 0) {
+        setError(err?.message || 'Failed to load history')
+      }
     } finally {
       inFlight.delete(siteId)
       setLoading(false)

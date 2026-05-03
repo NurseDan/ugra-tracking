@@ -62,13 +62,18 @@ function isStaleData(timeStr) {
   return ageMinutes > STALE_AFTER_MINUTES
 }
 
-function loadAllCachedForecasts() {
+function loadAllCachedForecasts({ allowStale = false } = {}) {
   const result = {}
   for (const g of GAUGES) {
-    const fc = loadForecastCache(g.id)
+    const fc = loadForecastCache(g.id, { allowStale })
     if (fc) result[g.id] = fc
   }
   return result
+}
+
+function getOnlineState() {
+  if (typeof navigator === 'undefined') return true
+  return navigator.onLine !== false
 }
 
 const forecastGenerating = new Set()
@@ -94,13 +99,34 @@ export default function App() {
   const [surgeEvents, setSurgeEvents] = useState([])
   const [lastUpdate, setLastUpdate] = useState(null)
   const [fetchError, setFetchError] = useState(false)
-  const [cachedForecasts, setCachedForecasts] = useState(() => loadAllCachedForecasts())
+  const [isOffline, setIsOffline] = useState(() => !getOnlineState())
+  const [cachedForecasts, setCachedForecasts] = useState(() =>
+    loadAllCachedForecasts({ allowStale: !getOnlineState() })
+  )
   const prevAlertsRef = useRef({})
 
   useEffect(() => {
     fetchData()
     const i = setInterval(fetchData, REFRESH_MS)
     return () => clearInterval(i)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleOnline = () => {
+      setIsOffline(false)
+      fetchData()
+    }
+    const handleOffline = () => {
+      setIsOffline(true)
+      setCachedForecasts(loadAllCachedForecasts({ allowStale: true }))
+    }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
   }, [])
 
   useEffect(() => {
@@ -117,11 +143,11 @@ export default function App() {
   async function fetchData() {
     try {
       const ids = GAUGES.map(g => g.id)
-      // USGS is the only required call. Weather forecasts (Open-Meteo /
-      // weather.gov) are best-effort: if any rate-limits or fails we still
-      // want gauge data, the alert banner, and the lastUpdate timestamp
-      // to refresh. Use allSettled + per-call catch so a single 429 from
-      // weather.gov doesn't strand the dashboard in a "Loading…" state.
+      // USGS is the primary data source. Weather forecasts (Open-Meteo /
+      // weather.gov) are best-effort: per-call .catch + allSettled ensures a
+      // single 429 from weather.gov doesn't strand the dashboard. USGS
+      // failures (offline, network down) fall back to cached data via the
+      // offline banner path rather than throwing.
       const [usgsResult, ...weatherResults] = await Promise.allSettled([
         fetchUSGSGauges(ids),
         ...GAUGES.map(g =>
@@ -129,10 +155,8 @@ export default function App() {
         )
       ])
 
-      if (usgsResult.status !== 'fulfilled' || !usgsResult.value) {
-        throw usgsResult.reason || new Error('USGS fetch failed')
-      }
-      const usgsData = usgsResult.value
+      const usgsData = usgsResult.status === 'fulfilled' ? (usgsResult.value || {}) : {}
+      const usgsHasData = Object.keys(usgsData).length > 0
 
       const forecastByGauge = {}
       GAUGES.forEach((g, i) => {
@@ -182,15 +206,22 @@ export default function App() {
       }
 
       const surges = detectSurges(processed)
-      setData(processed)
-      setSurgeEvents(surges)
-      setLastUpdate(new Date())
-      setFetchError(false)
-      setCachedForecasts(loadAllCachedForecasts())
-      backgroundGenerateForecasts(setCachedForecasts)
+      const networkOffline = !getOnlineState()
+      const useStaleForecasts = networkOffline || !usgsHasData
+      if (usgsHasData) {
+        setData(processed)
+        setSurgeEvents(surges)
+        setLastUpdate(new Date())
+      }
+      setFetchError(!usgsHasData)
+      setIsOffline(networkOffline)
+      setCachedForecasts(loadAllCachedForecasts({ allowStale: useStaleForecasts }))
+      if (!useStaleForecasts) backgroundGenerateForecasts(setCachedForecasts)
     } catch (err) {
-      console.error('Failed to fetch data:', err)
+      console.warn('Failed to fetch data, falling back to cached values:', err)
       setFetchError(true)
+      setIsOffline(true)
+      setCachedForecasts(loadAllCachedForecasts({ allowStale: true }))
     }
   }
 
@@ -203,10 +234,12 @@ export default function App() {
         <div className="dashboard-container">
           <AppHeader highestAlert={highestAlert} lastUpdate={lastUpdate} />
 
-          {fetchError && (
+          {(isOffline || fetchError) && (
             <div className="error-banner">
               <WifiOff size={16} />
-              Data refresh failed — displaying last known values
+              {isOffline
+                ? 'Offline — showing last cached river data'
+                : 'Data refresh failed — displaying last known values'}
               {lastUpdate && <span> from {formatCDT(lastUpdate)}</span>}
             </div>
           )}

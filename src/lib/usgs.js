@@ -36,14 +36,26 @@ function mergeGaugeData(target, source) {
 async function fetchUSGSChunk(ids) {
   const siteList = ids.join(',')
   const url = `https://waterservices.usgs.gov/nwis/iv/?format=json&sites=${siteList}&parameterCd=${USGS_STAGE_PARAMETER},${USGS_FLOW_PARAMETER}&period=PT6H&siteStatus=all`
-  const res = await fetch(url)
+
+  let res
+  try {
+    res = await fetch(url)
+  } catch (err) {
+    console.warn(`USGS request failed (offline?) for sites ${siteList}: ${err?.message || err}`)
+    return {}
+  }
 
   if (!res.ok) {
     console.warn(`USGS request failed with ${res.status} for sites ${siteList}`)
     return {}
   }
 
-  const json = await res.json()
+  let json
+  try {
+    json = await res.json()
+  } catch {
+    return {}
+  }
   const timeSeries = json?.value?.timeSeries || []
   const result = {}
 
