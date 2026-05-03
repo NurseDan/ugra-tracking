@@ -11,6 +11,8 @@ const SentinelContext = createContext(null)
 function alertTouchesGauge(alert, gauge) {
   if (!alert || !gauge) return false
   if (Array.isArray(alert.gaugeIds) && alert.gaugeIds.includes(gauge.id)) return true
+  if (Array.isArray(alert.affectedGaugeIds) && alert.affectedGaugeIds.includes(gauge.id)) return true
+  if (alert.gaugeId && alert.gaugeId === gauge.id) return true
   const text = `${alert.areaDesc || ''} ${alert.headline || ''} ${alert.description || ''}`.toLowerCase()
   const candidates = [gauge.shortName, gauge.name, gauge.county]
     .filter(Boolean)
@@ -49,8 +51,11 @@ export function SentinelProvider({ gaugesData, surgeEvents = [], children }) {
   const basin = useBasinBriefing(basinContexts, {})
 
   // Mount the notifier once at the app root so it fires regardless of
-  // which page is currently visible.
-  useAlertNotifier(gaugesData, nws.alerts, { gauges: GAUGES })
+  // which page is currently visible. Gate enablement until at least one
+  // gauge reading has loaded so the first poll's empty -> populated
+  // transition does not look like an escalation.
+  const hasReadings = !!gaugesData && Object.keys(gaugesData).length > 0
+  useAlertNotifier(gaugesData, nws.alerts, { gauges: GAUGES, enabled: hasReadings })
 
   const value = useMemo(
     () => ({
