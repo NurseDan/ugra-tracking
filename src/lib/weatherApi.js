@@ -1,3 +1,43 @@
+export async function fetchQPF72h(lat, lng) {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=precipitation,precipitation_probability&timezone=America/Chicago&forecast_days=4&past_days=1`
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Weather request failed with ${res.status}`)
+    const json = await res.json()
+    const now = new Date()
+    const windowEnd = new Date(now.getTime() + 72 * 60 * 60 * 1000)
+    const past24Start = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+
+    const times = json?.hourly?.time || []
+    const precip = json?.hourly?.precipitation || []
+    const probability = json?.hourly?.precipitation_probability || []
+
+    const hourly = []
+    let past24hInches = 0
+
+    for (let i = 0; i < times.length; i++) {
+      const forecastTime = new Date(times[i])
+      const mm = Number(precip[i] || 0)
+      const inches = mm * 0.0393701
+
+      if (forecastTime >= past24Start && forecastTime <= now) {
+        past24hInches += inches
+      }
+
+      if (forecastTime <= now || forecastTime > windowEnd) continue
+      hourly.push({
+        time: times[i],
+        inches,
+        probability: Number(probability[i] || 0)
+      })
+    }
+    return { hourly, past24hInches }
+  } catch (err) {
+    console.error('[weatherApi] fetchQPF72h failed:', err)
+    return { hourly: [], past24hInches: 0 }
+  }
+}
+
 export async function fetchPrecipitationForecast(lat, lng) {
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&hourly=precipitation,precipitation_probability&timezone=America/Chicago&forecast_days=2`

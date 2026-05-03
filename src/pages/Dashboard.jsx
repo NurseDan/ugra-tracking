@@ -10,9 +10,48 @@ import BasinBriefingHeader from '../components/BasinBriefingHeader'
 import ReservoirCard from '../components/ReservoirCard'
 import AhpsForecastSummary from '../components/AhpsForecastSummary'
 import { useSentinel } from '../contexts/SentinelContext'
-import { AlertTriangle, Clock, ShieldAlert } from 'lucide-react'
+import { AlertTriangle, Clock, ShieldAlert, TrendingUp } from 'lucide-react'
 
-export default function Dashboard() {
+function categoryColor(cat) {
+  if (!cat) return '#64748b'
+  if (cat.includes('Major')) return '#991b1b'
+  if (cat.includes('Moderate')) return '#ef4444'
+  if (cat.includes('Minor')) return '#f97316'
+  if (cat.includes('Action')) return '#f59e0b'
+  return '#10b981'
+}
+
+function Peak24hBadge({ forecast }) {
+  if (!forecast) return null
+  const now = Date.now()
+  const cutoff = now + 24 * 60 * 60 * 1000
+
+  let peak = null
+  for (const p of (forecast.points || [])) {
+    if (new Date(p.t).getTime() > cutoff) break
+    if (!peak || p.stageFt > peak.stageFt) peak = p
+  }
+
+  if (!peak) return null
+
+  const color = categoryColor(forecast.peak?.category)
+  const delta = peak.stageFt - (forecast.points[0]?.stageFt ?? peak.stageFt)
+  const sign = delta >= 0 ? '+' : ''
+
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      padding: '3px 8px', borderRadius: 6,
+      background: `${color}22`, border: `1px solid ${color}66`,
+      fontSize: '0.7rem', fontWeight: 600, color, marginTop: 4
+    }}>
+      <TrendingUp size={10} />
+      Next 24h: {sign}{delta.toFixed(1)} ft → {forecast.peak?.category || '—'}
+    </div>
+  )
+}
+
+export default function Dashboard({ forecasts = {} }) {
   const { gaugesData: data, surgeEvents, nwsAlerts, basinBriefing, alertsForGauge } = useSentinel()
 
   return (
@@ -49,6 +88,7 @@ export default function Dashboard() {
           const alertLabel = ALERT_LEVELS[alertClass]?.label || 'Normal'
           const surgeEvent = surgeEvents?.find(e => e.downstreamGaugeId === g.id)
           const gaugeAlerts = alertsForGauge(g.id)
+          const gaugeForecast = forecasts[g.id] || null
 
           const historyHeights = d?.history
             ? d.history.map(h => h.height).filter(h => typeof h === 'number' && !isNaN(h))
@@ -98,6 +138,7 @@ export default function Dashboard() {
                       Downstream impact ~{d.etaHours.toFixed(1)}h
                     </div>
                   )}
+                  {gaugeForecast && <Peak24hBadge forecast={gaugeForecast} />}
                 </div>
 
                 <div className="gauge-metrics">

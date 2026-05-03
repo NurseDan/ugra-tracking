@@ -1,16 +1,30 @@
 # Guadalupe Sentinel
 
-React + Vite flood monitoring dashboard for the Guadalupe River basin in Texas.
-Pulls live USGS gauge readings, NWS alerts, AHPS / NOAA NWM forecasts, Canyon
-Lake reservoir status, and animated radar / MRMS rainfall overlays. Renders an
-LLM-backed plain-English risk briefing for the basin and per-gauge.
+Real-time river monitoring and flood-warning system for the Guadalupe River basin in Texas.
+Pulls live USGS gauge readings, NWS alerts, AHPS / NOAA NWM forecasts, Canyon Lake reservoir
+status, and animated radar / MRMS rainfall overlays. Renders an LLM-backed plain-English risk
+briefing for the basin and per-gauge, and a 72-hour AI-assisted rise forecast per gauge.
+
+## Tech Stack
+
+- **Frontend**: React 18, Vite 6, React Router 7
+- **Mapping**: Leaflet / React-Leaflet with Nexrad radar overlay
+- **Icons**: Lucide-React
+- **Data Sources**:
+  - USGS Waterservices (instantaneous values + daily values, 14-day history)
+  - Open-Meteo (precipitation forecast, QPF 72h)
+  - NWS / AHPS (flood alerts, official stage forecasts)
+  - National Water Model (streamflow forecasts)
+  - OpenAI (AI briefings and rise forecast narratives)
 
 ## Architecture
 
 ```
 src/
   App.jsx                       Top-level data poller (USGS + weather), router,
-                                wraps everything in <SentinelProvider>.
+                                wraps everything in <SentinelProvider>. Also
+                                merges gauge history into IndexedDB and runs
+                                background forecast generation.
   contexts/
     SentinelContext.jsx         Lifts NWS alerts, reservoir status, basin
                                 briefing into context. Mounts useAlertNotifier
@@ -18,10 +32,10 @@ src/
 
   pages/
     Dashboard.jsx               Alerts banner -> basin briefing -> reservoir
-                                card -> per-gauge cards -> river map.
-    GaugeDetail.jsx             AI briefing card, AHPS chart, NWM chart, NWS
-                                alerts touching this gauge, per-gauge notify
-                                toggle, flood stage monitor.
+                                card -> per-gauge cards (with Peak24hBadge) -> river map.
+    GaugeDetail.jsx             AI briefing card, AHPS chart, NWM chart, 72h rise
+                                forecast panel, 14-day history chart, NWS alerts,
+                                per-gauge notify toggle, flood stage monitor.
     Incidents.jsx               localStorage-backed incident history with
                                 filters, stats, CSV export.
 
@@ -35,6 +49,10 @@ src/
     AhpsForecastChart.jsx       Observed vs official AHPS forecast SVG chart.
     AhpsForecastSummary.jsx     Inline AHPS crest summary chip (dashboard).
     StreamflowForecastChart.jsx NWM (with Open-Meteo fallback) flow chart.
+    HistoryChart.jsx            14-day SVG history chart with multi-tier flood
+                                threshold lines (Action/Minor/Moderate/Major).
+    RiseForecastPanel.jsx       72h rise forecast panel: deterministic + LLM,
+                                confidence band, AHPS/NWM fusion, narrative.
     AnimatedRadarLayer.jsx      RainViewer animated radar tiles for the map.
     MrmsQpeLayer.jsx            MRMS QPE WMS overlay + legend.
     MapLayerControls.jsx        Layer toggle panel (radar / MRMS window).
@@ -48,13 +66,17 @@ src/
     useStreamflowForecast.js    NWM with Open-Meteo fallback.
     useGaugeBriefing.js         useGaugeBriefing + useBasinBriefing (LLM).
     useAlertNotifier.js         Fires browser notifications on escalation.
+    useGaugeHistory.js          14-day history fetch + IndexedDB cache hook.
 
   lib/
-    usgs.js, weatherApi.js      Live readings + precipitation forecasts.
+    usgs.js                     Live readings + precipitation forecasts + 14-day IV/DV fetch.
+    weatherApi.js               Open-Meteo precipitation + QPF 72h (with past 24h rainfall).
     alertEngine.js, surgeEngine.js, alertColors.js
     nwsAlerts.js                api.weather.gov client + alert normalizer.
     ahps.js, nwm.js, openMeteoFlood.js, canyonLake.js
     aiBriefing.js               OpenAI-backed briefing generator (browser).
+    riseForecast.js             72h rise forecast engine (deterministic + LLM, AHPS/NWM fusion).
+    gaugeHistory.js             IndexedDB/localStorage 14-day history persistence + forecast TTL cache.
     radarLayers.js              RainViewer + MRMS tile/WMS helpers.
     notifications.js            Permission + subscription store + service worker.
     incidentLog.js              localStorage incident log + subscribe API.
@@ -67,26 +89,47 @@ src/
 ## Data flow
 
 1. `App.jsx` polls USGS + Open-Meteo every `REFRESH_MS`, computes alert level,
-   surge events, sentinel score, and stamps any escalation into the
-   incident log.
+   surge events, sentinel score, and stamps any escalation into the incident log.
+   After each refresh it merges 6h history into IndexedDB and fires
+   `backgroundGenerateForecasts` (non-blocking, per-gauge serial with TTL dedup).
 2. `<SentinelProvider>` mounts the polling hooks for NWS alerts, Canyon Lake
    reservoir, the basin AI briefing, and the alert notifier — exposing them
    through `useSentinel()` so pages don't prop-drill.
-3. `Dashboard` and `GaugeDetail` consume the context; per-gauge alert
-   matching (NWS area description vs gauge name/county) is centralized in
-   `alertsForGauge()` on the context.
+3. `Dashboard` consumes context + `forecasts` prop (cached rise forecasts) to
+   render `Peak24hBadge` on each gauge card.
+4. `GaugeDetail` consumes context; loads 14-day history via `useGaugeHistory`,
+   feeds AHPS peak + NWM peak (from their respective hooks) into `RiseForecastPanel`
+   for official-forecast fusion in the rise forecast engine.
+
+## Key Features
+
+- **Live USGS data**: 6-hour instantaneous values refreshed every 5 minutes
+- **14-day history**: IndexedDB-persisted rolling window, fetched on gauge detail view
+- **Rise rate alerts**: 5-min, 15-min, 60-min rise rates mapped to GREEN/YELLOW/ORANGE/RED/BLACK
+- **Surge detection**: Upstream surge events propagated to downstream gauge cards
+- **72h Rise Forecast**: Deterministic trend + QPF model with AHPS/NWM fusion + optional LLM narrative
+- **Forecast caching**: 15-minute TTL per gauge in localStorage, refreshed on visibility change
+- **Dashboard peak badges**: Next 24h peak stage from cached forecast shown on each gauge card
+- **Multi-tier flood thresholds**: Action/Minor/Moderate/Major lines on history chart (from AHPS or derived)
+- **AI briefings**: Per-gauge and basin-wide risk narratives via OpenAI (requires VITE_OPENAI_API_KEY)
+- **Official forecasts**: AHPS stage and NWM streamflow overlays on gauge detail
+- **NWS alerts**: Real-time NWS alerts matched to gauges, dismissable banner on dashboard
+- **Notifications**: Per-gauge browser push notifications on alert escalation
+- **Incidents log**: localStorage-backed alert escalation history with CSV export
+- **Reservoir status**: Canyon Lake elevation / inflow / release card
+- **Animated radar**: RainViewer animated radar tiles + MRMS QPE overlay
 
 ## Required secrets / env vars
 
 | Variable | Purpose | Required? |
 | --- | --- | --- |
-| `VITE_OPENAI_API_KEY` | Powers the basin + per-gauge AI briefings via the OpenAI Chat Completions API. If missing, briefings render an "AI briefing unavailable" state instead of failing. | Optional |
+| `VITE_OPENAI_API_KEY` | Powers the basin + per-gauge AI briefings and LLM-assisted rise forecast narratives. If missing, briefings and LLM forecasts degrade gracefully. | Optional |
 
 > **Security note:** any `VITE_`-prefixed env var is inlined into the public
 > JS bundle. The current `aiBriefing.js` calls OpenAI directly from the
 > browser to match the rest of the app's all-client-side data fetching. For
-> a production deployment, replace `createOpenAiProvider` (via
-> `setDefaultProvider`) with a thin server proxy so the key stays private.
+> a production deployment, replace `createOpenAiProvider` with a thin server
+> proxy so the key stays private.
 
 No other API keys are required — USGS, NWS, NOAA NWM, RainViewer, MRMS
 (Iowa Mesonet WMS), Open-Meteo, and AHPS are all public anonymous APIs.
@@ -100,7 +143,7 @@ specific gauge or globally to NWS alerts in the header notifications panel.
 
 ## Build / run
 
-- `npm run dev` — Vite dev server.
+- `npm run dev` — Vite dev server on port 5000.
 - `npm run build` — production build to `dist/`.
 
 ## PWA / iOS install
@@ -149,8 +192,10 @@ follow-up.
 ## Background
 
 The original tasks (#1–#8) shipped each new data source as a self-contained
-module. Task #9 (this one) wires those modules into the app shell:
-`SentinelContext`, the `/incidents` route, the new header with nav and the
-notifications panel, the per-gauge AI briefing + AHPS + NWM panels in
-`GaugeDetail`, the per-gauge NWS alert pill on `Dashboard`, and replacing
-the static NEXRAD overlay with the animated radar + MRMS controls on the map.
+module. Task #9 wires those modules into the app shell: `SentinelContext`,
+the `/incidents` route, the new header with nav and the notifications panel,
+the per-gauge AI briefing + AHPS + NWM panels in `GaugeDetail`, the per-gauge
+NWS alert pill on `Dashboard`, and replacing the static NEXRAD overlay with
+the animated radar + MRMS controls on the map. Task #10 adds 14-day history
+persistence, the 72h rise forecast engine, dashboard peak badges, and
+multi-tier flood threshold lines.

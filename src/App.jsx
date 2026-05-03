@@ -7,6 +7,8 @@ import { calculateRates, getAlertLevel, getHighestAlert, ALERT_LEVELS } from './
 import { detectSurges } from './lib/surgeEngine'
 import { logIncident } from './lib/incidentLog'
 import { formatCDT } from './lib/formatTime'
+import { mergeHistory, loadForecastCache, isForecastStale } from './lib/gaugeHistory'
+import { generateAllForecasts } from './lib/riseForecast'
 import { WifiOff } from 'lucide-react'
 
 import Dashboard from './pages/Dashboard'
@@ -60,11 +62,39 @@ function isStaleData(timeStr) {
   return ageMinutes > STALE_AFTER_MINUTES
 }
 
+function loadAllCachedForecasts() {
+  const result = {}
+  for (const g of GAUGES) {
+    const fc = loadForecastCache(g.id)
+    if (fc) result[g.id] = fc
+  }
+  return result
+}
+
+const forecastGenerating = new Set()
+
+async function backgroundGenerateForecasts(setCachedForecasts) {
+  const staleSiteIds = GAUGES.map(g => g.id).filter(id => isForecastStale(id) && !forecastGenerating.has(id))
+  if (staleSiteIds.length === 0) return
+
+  for (const siteId of staleSiteIds) {
+    forecastGenerating.add(siteId)
+    try {
+      await generateAllForecasts([siteId])
+    } catch {}
+    finally {
+      forecastGenerating.delete(siteId)
+    }
+  }
+  setCachedForecasts(loadAllCachedForecasts())
+}
+
 export default function App() {
   const [data, setData] = useState({})
   const [surgeEvents, setSurgeEvents] = useState([])
   const [lastUpdate, setLastUpdate] = useState(null)
   const [fetchError, setFetchError] = useState(false)
+  const [cachedForecasts, setCachedForecasts] = useState(() => loadAllCachedForecasts())
   const prevAlertsRef = useRef({})
 
   useEffect(() => {
@@ -73,16 +103,27 @@ export default function App() {
     return () => clearInterval(i)
   }, [])
 
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) {
+        fetchData()
+        backgroundGenerateForecasts(setCachedForecasts)
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => document.removeEventListener('visibilitychange', handleVisibility)
+  }, [])
+
   async function fetchData() {
     try {
       const ids = GAUGES.map(g => g.id)
-      const [usgsData, ...forecasts] = await Promise.all([
+      const [usgsData, ...weatherForecasts] = await Promise.all([
         fetchUSGSGauges(ids),
         ...GAUGES.map(g => fetchPrecipitationForecast(g.lat, g.lng))
       ])
 
       const forecastByGauge = {}
-      GAUGES.forEach((g, i) => { forecastByGauge[g.id] = forecasts[i] })
+      GAUGES.forEach((g, i) => { forecastByGauge[g.id] = weatherForecasts[i] })
 
       const processed = {}
 
@@ -119,6 +160,10 @@ export default function App() {
           })
         }
         prevAlertsRef.current[g.id] = alert
+
+        if (d.history && d.history.length > 0) {
+          mergeHistory(g.id, d.history).catch(() => {})
+        }
       }
 
       const surges = detectSurges(processed)
@@ -126,6 +171,8 @@ export default function App() {
       setSurgeEvents(surges)
       setLastUpdate(new Date())
       setFetchError(false)
+      setCachedForecasts(loadAllCachedForecasts())
+      backgroundGenerateForecasts(setCachedForecasts)
     } catch (err) {
       console.error('Failed to fetch data:', err)
       setFetchError(true)
@@ -150,7 +197,7 @@ export default function App() {
           )}
 
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Dashboard forecasts={cachedForecasts} />} />
             <Route path="/gauge/:id" element={<GaugeDetail />} />
             <Route path="/incidents" element={<Incidents />} />
           </Routes>

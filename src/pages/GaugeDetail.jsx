@@ -8,14 +8,19 @@ import NwsAlertsBanner from '../components/NwsAlertsBanner'
 import GaugeBriefingCard from '../components/GaugeBriefingCard'
 import AhpsForecastChart from '../components/AhpsForecastChart'
 import StreamflowForecastChart from '../components/StreamflowForecastChart'
+import HistoryChart from '../components/HistoryChart'
+import RiseForecastPanel from '../components/RiseForecastPanel'
 import { useSentinel } from '../contexts/SentinelContext'
 import { useGaugeBriefing } from '../hooks/useGaugeBriefing'
+import { useGaugeHistory } from '../hooks/useGaugeHistory'
+import { useAhpsForecast } from '../hooks/useAhpsForecast'
+import { useStreamflowForecast } from '../hooks/useStreamflowForecast'
 import { buildGaugeContext } from '../lib/aiBriefing'
 import {
   isSubscribedToGauge, subscribeToGauge, unsubscribeFromGauge,
   isSupported as notifSupported, getPermissionState, requestPermission, ensureServiceWorker
 } from '../lib/notifications'
-import { ArrowLeft, AlertTriangle, Activity, Clock, Bell, BellOff } from 'lucide-react'
+import { ArrowLeft, AlertTriangle, Activity, Cpu, Clock, Database, Bell, BellOff } from 'lucide-react'
 
 function NotificationToggle({ gaugeId }) {
   const supported = notifSupported()
@@ -89,6 +94,10 @@ export default function GaugeDetail() {
   const d = gaugesData[id]
   const gaugeAlerts = alertsForGauge(id)
 
+  const { history, loading: historyLoading } = useGaugeHistory(id)
+  const { forecast: ahpsFcArray, floodCategories: ahpsFloodCategories } = useAhpsForecast(gaugeConfig)
+  const { series: nwmSeries, source: nwmSource } = useStreamflowForecast(gaugeConfig)
+
   const briefingContext = useMemo(() => {
     if (!gaugeConfig || !d) return null
     return buildGaugeContext({
@@ -106,6 +115,29 @@ export default function GaugeDetail() {
   }, [gaugeConfig, d, gaugeAlerts])
 
   const briefing = useGaugeBriefing(gaugeConfig, briefingContext, { enabled: Boolean(briefingContext) })
+
+
+  const ahpsForecastForEngine = useMemo(() => {
+    if (!ahpsFcArray || ahpsFcArray.length === 0) return undefined
+    const peakPoint = ahpsFcArray.reduce((best, p) =>
+      (!best || (p.stage ?? 0) > (best.stage ?? 0)) ? p : best, null)
+    if (!peakPoint || peakPoint.stage == null) return undefined
+    return { peakFt: peakPoint.stage, peakAt: peakPoint.t }
+  }, [ahpsFcArray])
+
+  const streamflowForecastForEngine = useMemo(() => {
+    if (!nwmSeries || nwmSeries.length === 0) return undefined
+    const peakPoint = nwmSeries.reduce((best, p) => {
+      const v = p.flow ?? p.primary ?? 0
+      const bv = best ? (best.flow ?? best.primary ?? 0) : 0
+      return v > bv ? p : best
+    }, null)
+    if (!peakPoint) return undefined
+    const peakCfs = peakPoint.flow ?? peakPoint.primary
+    const peakAt = peakPoint.t ?? peakPoint.validTime
+    if (!Number.isFinite(peakCfs) || !peakAt) return undefined
+    return { peakCfs, peakAt, source: nwmSource }
+  }, [nwmSeries, nwmSource])
 
   if (!gaugeConfig) {
     return (
@@ -223,6 +255,16 @@ export default function GaugeDetail() {
             />
           </div>
 
+          <RiseForecastPanel
+            siteId={id}
+            history={history.length > 0 ? history : null}
+            floodStageFt={gaugeConfig.floodStageFt}
+            floodCategories={ahpsFloodCategories}
+            ahpsForecast={ahpsForecastForEngine}
+            streamflowForecast={streamflowForecastForEngine}
+            initialForecast={null}
+          />
+
           <div className="glass-panel" style={{ borderLeft: `4px solid ${flowColor}` }}>
             <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, color: '#f8fafc' }}>
               <Activity size={20} color={flowColor} />
@@ -237,8 +279,36 @@ export default function GaugeDetail() {
           </div>
 
           <div className="glass-panel">
-            <h3 style={{ marginBottom: 16, color: '#f8fafc' }}>Past 2 Hours History</h3>
-            <Sparkline data={historyHeights} color={`var(--alert-${alertClass.toLowerCase()})`} height={100} width={800} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+              <h3 style={{ color: '#f8fafc', margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Database size={18} color="#60a5fa" />
+                14-Day History
+                {historyLoading && <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 400 }}>Loading...</span>}
+              </h3>
+              {history.length > 0 && (
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                  {history.length.toLocaleString()} readings
+                </span>
+              )}
+            </div>
+            {history.length >= 2 ? (
+              <HistoryChart
+                history={history}
+                floodStageFt={gaugeConfig.floodStageFt}
+                floodCategories={ahpsFloodCategories}
+                height={280}
+              />
+            ) : (
+              <>
+                <div style={{ marginBottom: 8 }}>
+                  <div className="metric-label" style={{ marginBottom: 4 }}>Recent 6-Hour Window</div>
+                  <Sparkline data={historyHeights} color={`var(--alert-${alertClass.toLowerCase()})`} height={100} width={800} />
+                </div>
+                {historyLoading && (
+                  <div style={{ color: '#94a3b8', fontSize: '0.8rem', marginTop: 8 }}>Fetching 14-day history...</div>
+                )}
+              </>
+            )}
             <div style={{ marginTop: 16, textAlign: 'right', fontSize: '0.875rem', color: '#94a3b8' }}>
               Last Reading: {formatCDT(d.time)}
             </div>
