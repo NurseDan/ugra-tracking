@@ -107,7 +107,19 @@ export default function GaugeDetail() {
 
   const briefing = useGaugeBriefing(gaugeConfig, briefingContext, { enabled: Boolean(briefingContext) })
 
-  if (!gaugeConfig || !d) {
+  if (!gaugeConfig) {
+    return (
+      <div className="glass-panel" style={{ textAlign: 'center', marginTop: 40, padding: 48 }}>
+        <h2 style={{ marginBottom: 12 }}>Gauge Not Found</h2>
+        <p style={{ color: '#94a3b8', marginBottom: 16 }}>
+          No gauge with ID <code>{id}</code> is configured.
+        </p>
+        <Link to="/" style={{ color: '#60a5fa', textDecoration: 'none' }}>&larr; Return to Dashboard</Link>
+      </div>
+    )
+  }
+
+  if (!d) {
     return (
       <div className="glass-panel" style={{ textAlign: 'center', marginTop: 40, padding: 48 }}>
         <div className="loading-spinner" style={{ margin: '0 auto 16px' }} />
