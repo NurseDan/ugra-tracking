@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle, Download, Trash2, Search, ArrowLeft, Clock, Activity, Filter, Plus
@@ -14,12 +14,15 @@ import './Incidents.css'
 const SEVERITY_ORDER = ['YELLOW', 'ORANGE', 'RED', 'BLACK']
 const PAGE_SIZE = 100
 
-function getSnapshot() {
-  return listIncidents()
-}
-
 function useIncidents() {
-  return useSyncExternalStore(subscribe, getSnapshot, () => [])
+  const [incidents, setIncidents] = useState(() => listIncidents())
+  useEffect(() => {
+    const update = () => setIncidents(listIncidents())
+    const unsub = subscribe(update)
+    update()
+    return unsub
+  }, [])
+  return incidents
 }
 
 function relativeTime(iso) {
