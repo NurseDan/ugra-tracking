@@ -1,5 +1,4 @@
 import { ArrowDownRight, ArrowUpRight, Droplet, Minus, RefreshCw } from 'lucide-react'
-import { useReservoirStatus } from '../lib/useReservoirStatus.js'
 import { useSentinel } from '../contexts/SentinelContext.jsx'
 import { formatCDT } from '../lib/formatTime.js'
 import './ReservoirCard.css'
