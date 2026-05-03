@@ -1,0 +1,25 @@
+#3 - NWM + Open-Meteo Flood Forecasts
+What & Why
+Add streamflow forecasts from NOAA's National Water Model (short-range 18h, medium-range 10d) and Open-Meteo's free GloFAS-derived Flood API. Together these give predicted discharge for every reach — including tributaries that have no USGS gauge.
+
+Done looks like
+A fetchNwmForecast(reachId, range) function pulls NWM streamflow forecasts (via NOAA's public NWM service or AWS-hosted CSV/NetCDF subset endpoint, whichever is reachable from the browser; if CORS blocks both, document the limitation and ship the Open-Meteo path only).
+A fetchOpenMeteoFlood(lat, lon) function pulls daily river discharge from https://flood-api.open-meteo.com/v1/flood.
+Each gauge in config/gauges.js is augmented with an optional nwmReachId via a side-car file src/config/nwmReaches.js (do not edit the existing config file).
+A useStreamflowForecast(gauge) hook merges NWM (preferred) and Open-Meteo (fallback) into a single normalized forecast shape and exposes ensemble min/median/max where available.
+A <StreamflowForecastChart /> component plots forecast discharge with confidence band and marks the gauge's flood-flow threshold.
+Hook handles CORS / network failures by falling back cleanly and surfacing source: "nwm" | "open-meteo" | "none".
+Out of scope
+Wiring the chart into GaugeDetail.jsx (handled by the wiring task).
+Modifying config/gauges.js directly.
+Steps
+Reach mapping — Create src/config/nwmReaches.js mapping each gauge ID to its NHDPlus reach ID (nwmReachId) where known.
+NWM client — Implement the fetch with a short timeout; if CORS blocks, mark source as unavailable rather than throwing.
+Open-Meteo flood client — Implement and normalize daily discharge series.
+Merge & normalize — Single output shape { source, series: [{t, q, qLow?, qHigh?}], updated }.
+Hook with cache — 30-minute cache per gauge.
+Forecast chart component — SVG chart with confidence band, threshold line, and last-observed dot from USGS for continuity.
+Relevant files
+src/config/gauges.js
+src/components/Sparkline.jsx
+src/lib/usgs.js

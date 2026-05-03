@@ -1,0 +1,79 @@
+.streamflow-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.streamflow-chart__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 0.72rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.streamflow-chart__source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-weight: 600;
+}
+
+.streamflow-chart__source--nwm { color: #34d399; }
+.streamflow-chart__source--open-meteo { color: #93c5fd; }
+.streamflow-chart__source--none { color: #fca5a5; }
+
+.streamflow-chart__svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
+}
+
+.streamflow-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  font-size: 0.7rem;
+  color: var(--text-muted, #94a3b8);
+}
+
+.streamflow-chart__swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.streamflow-chart__swatch i {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.streamflow-chart__swatch--median { color: #60a5fa; }
+.streamflow-chart__swatch--band { color: rgba(96, 165, 250, 0.5); }
+.streamflow-chart__swatch--threshold { color: #f87171; }
+.streamflow-chart__swatch--observed { color: #facc15; }
+
+.streamflow-chart__empty {
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.4);
+  border: 1px dashed rgba(148, 163, 184, 0.3);
+  color: var(--text-muted, #94a3b8);
+  font-size: 0.85rem;
+  text-align: center;
+}
