@@ -103,6 +103,49 @@ specific gauge or globally to NWS alerts in the header notifications panel.
 - `npm run dev` — Vite dev server.
 - `npm run build` — production build to `dist/`.
 
+## PWA / iOS install
+
+The app is a Progressive Web App and is installable on both desktop browsers
+and iOS / Android, sharing the same React/Vite codebase.
+
+- `index.html` ships the PWA `<link rel="manifest">`, `theme-color`,
+  `apple-touch-icon`, and `apple-mobile-web-app-*` meta tags so Safari treats
+  "Add to Home Screen" as a real installable app (full-screen, dark status
+  bar, custom icon).
+- `public/manifest.webmanifest` declares the app identity, icons (SVG +
+  192/512 PNG, plus 192/512 maskable PNG for Android adaptive icons),
+  brand colors, `display: standalone`, and an `/incidents` shortcut.
+- Icons live under `public/icons/` and are rendered from `public/icon.svg`
+  and `public/icon-maskable.svg` via ImageMagick (`convert`) at build/setup
+  time.
+- `public/sw.js` was upgraded from a notification-only worker to a real
+  PWA service worker:
+  - Pre-caches the app shell (`/`, manifest, icons) on install.
+  - Stale-while-revalidate for same-origin static assets.
+  - Network-first with cache fallback for the public APIs the app calls
+    (USGS, weather.gov, AHPS, NWM, Open-Meteo, RainViewer, MRMS, Esri
+    basemap tiles, Canyon Lake), capped to ~240 entries to respect iOS
+    storage limits.
+  - Navigation requests fall back to the cached `/` so the app launches
+    offline from the home-screen icon.
+
+### Install instructions for end users
+
+- **iOS Safari** — open the site, tap the Share button, choose
+  "Add to Home Screen". Launch from the home-screen icon for a
+  full-screen experience with notifications.
+- **Android Chrome** — tap the menu, then "Install app" / "Add to
+  Home Screen".
+- **Desktop Chrome / Edge** — click the install icon in the URL bar.
+
+### Native iOS app (future)
+
+To later ship to the App Store without rewriting the app, wrap the same
+build with [Capacitor](https://capacitorjs.com/) (`npx cap add ios`,
+point it at `dist/`). This requires an Apple Developer account. The
+PWA is the production target today; the Capacitor wrapper is a deferred
+follow-up.
+
 ## Background
 
 The original tasks (#1–#8) shipped each new data source as a self-contained
