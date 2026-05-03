@@ -1,27 +1,122 @@
-import React from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { GAUGES } from '../config/gauges'
 import { ALERT_LEVELS } from '../lib/alertEngine'
 import { formatCDT } from '../lib/formatTime'
 import Sparkline from '../components/Sparkline'
-import { ArrowLeft, AlertTriangle, Activity, Cpu, Clock } from 'lucide-react'
+import NwsAlertsBanner from '../components/NwsAlertsBanner'
+import GaugeBriefingCard from '../components/GaugeBriefingCard'
+import AhpsForecastChart from '../components/AhpsForecastChart'
+import StreamflowForecastChart from '../components/StreamflowForecastChart'
+import { useSentinel } from '../contexts/SentinelContext'
+import { useGaugeBriefing } from '../hooks/useGaugeBriefing'
+import { buildGaugeContext } from '../lib/aiBriefing'
+import {
+  isSubscribedToGauge, subscribeToGauge, unsubscribeFromGauge,
+  isSupported as notifSupported, getPermissionState, requestPermission, ensureServiceWorker
+} from '../lib/notifications'
+import { ArrowLeft, AlertTriangle, Activity, Clock, Bell, BellOff } from 'lucide-react'
 
-export default function GaugeDetail({ data }) {
+function NotificationToggle({ gaugeId }) {
+  const supported = notifSupported()
+  const [permission, setPermission] = useState(() => (supported ? getPermissionState() : 'unsupported'))
+  const [subscribed, setSubscribed] = useState(() => (supported ? isSubscribedToGauge(gaugeId) : false))
+
+  useEffect(() => {
+    setSubscribed(supported ? isSubscribedToGauge(gaugeId) : false)
+  }, [gaugeId, supported])
+
+  if (!supported) {
+    return <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Notifications not supported in this browser.</div>
+  }
+
+  const enable = async () => {
+    if (permission !== 'granted') {
+      const result = await requestPermission()
+      setPermission(result)
+      if (result !== 'granted') return
+      ensureServiceWorker()
+    }
+    subscribeToGauge(gaugeId)
+    setSubscribed(true)
+  }
+
+  const disable = () => {
+    unsubscribeFromGauge(gaugeId)
+    setSubscribed(false)
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      {subscribed ? (
+        <button
+          type="button"
+          onClick={disable}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '8px 14px', borderRadius: 8,
+            background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.45)',
+            color: '#10b981', cursor: 'pointer', fontSize: '0.85rem'
+          }}
+        >
+          <Bell size={14} /> Notifications on — click to disable
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={enable}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            padding: '8px 14px', borderRadius: 8,
+            background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.15)',
+            color: '#cbd5e1', cursor: 'pointer', fontSize: '0.85rem'
+          }}
+        >
+          <BellOff size={14} /> Notify me about this gauge
+        </button>
+      )}
+      {permission === 'denied' && (
+        <span style={{ fontSize: '0.75rem', color: '#fca5a5' }}>Browser blocked notifications</span>
+      )}
+    </div>
+  )
+}
+
+export default function GaugeDetail() {
   const { id } = useParams()
+  const { gaugesData, alertsForGauge } = useSentinel()
   const gaugeConfig = GAUGES.find(g => g.id === id)
-  const d = data[id]
+  const d = gaugesData[id]
+  const gaugeAlerts = alertsForGauge(id)
+
+  const briefingContext = useMemo(() => {
+    if (!gaugeConfig || !d) return null
+    return buildGaugeContext({
+      gauge: gaugeConfig,
+      reading: d,
+      alerts: gaugeAlerts,
+      rainfall: d.forecast
+        ? {
+            next24hInches: d.forecast.totalInches,
+            maxHourlyInches: d.forecast.maxHourlyInches,
+            maxProbability: d.forecast.maxProbability
+          }
+        : null
+    })
+  }, [gaugeConfig, d, gaugeAlerts])
+
+  const briefing = useGaugeBriefing(gaugeConfig, briefingContext, { enabled: Boolean(briefingContext) })
 
   if (!gaugeConfig || !d) {
     return (
       <div className="glass-panel" style={{ textAlign: 'center', marginTop: 40, padding: 48 }}>
         <div className="loading-spinner" style={{ margin: '0 auto 16px' }} />
-        <h2 style={{ marginBottom: 12 }}>Loading Gauge Data...</h2>
+        <h2 style={{ marginBottom: 12 }}>Loading Gauge Data…</h2>
         <Link to="/" style={{ color: '#60a5fa', textDecoration: 'none' }}>&larr; Return to Dashboard</Link>
       </div>
     )
   }
 
-  const forecast = d.forecast
   const alertClass = d.alert || 'GREEN'
   const alertLabel = ALERT_LEVELS[alertClass]?.label || 'Normal'
   const floodStage = gaugeConfig.floodStageFt || 20
@@ -31,59 +126,19 @@ export default function GaugeDetail({ data }) {
   const fillPercent = Math.min((height / maxVisual) * 100, 100)
   const floodLinePercent = Math.min((floodStage / maxVisual) * 100, 100)
 
-  let aiMessage = 'Analyzing conditions...'
-  let aiColor = '#94a3b8'
-
-  if (!forecast) {
-    aiMessage = 'Weather data unavailable — precipitation forecast could not be loaded.'
-    aiColor = '#94a3b8'
-  } else if (d.rates) {
-    const riseRate = d.rates.rise60m || 0
-    const rain = forecast.totalInches || 0
-
-    if (rain > 1 && riseRate > 1) {
-      aiMessage = `CRITICAL DANGER: Localized AI modeling projects high likelihood of severe overbanking. Current 1hr rise rate of ${riseRate.toFixed(1)}ft compounded by ${rain.toFixed(1)}" of forecasted upstream precipitation.`
-      aiColor = '#ef4444'
-    } else if (rain > 0.5 && riseRate > 0) {
-      aiMessage = `WARNING: Expected surge acceleration. ${rain.toFixed(1)}" of rain is forecasted, which will exacerbate the current rising trend of ${riseRate.toFixed(2)}ft/hr.`
-      aiColor = '#f97316'
-    } else if (rain > 0.5 && riseRate <= 0) {
-      aiMessage = `WATCH: River is currently stable, but ${rain.toFixed(1)}" of precipitation is incoming. Expect delayed swelling and possible moderate rises.`
-      aiColor = '#f59e0b'
-    } else if (riseRate > 0.5) {
-      aiMessage = `WARNING: Rapid rise of ${riseRate.toFixed(1)}ft/hr detected with no significant incoming rain. Danger is likely from immediate localized runoff or upstream releases.`
-      aiColor = '#f97316'
-    } else {
-      aiMessage = `STABLE: No significant precipitation forecasted (${rain.toFixed(2)}"). River behavior is expected to follow normal discharge curves without sudden surges.`
-      aiColor = '#10b981'
-    }
-  }
-
   const historyHeights = d.history
     ? d.history.map(h => h.height).filter(h => typeof h === 'number' && !isNaN(h))
     : []
 
+  const flow = d.flow || 0
   let flowMessage = 'No flow data available.'
   let flowColor = '#94a3b8'
-  const flow = d.flow || 0
-
   if (d.flow !== undefined) {
-    if (flow > 5000) {
-      flowMessage = 'Severe / Flood Flow: Extremely dangerous, life-threatening currents. Avoid all water activities.'
-      flowColor = '#ef4444'
-    } else if (flow > 2000) {
-      flowMessage = 'Dangerous Flow: Very swift, powerful currents. High risk of debris. Stay out of the main channel.'
-      flowColor = '#f97316'
-    } else if (flow > 500) {
-      flowMessage = 'Fast Flow: Swift currents. Hazardous for inexperienced swimmers or casual tubing.'
-      flowColor = '#f59e0b'
-    } else if (flow > 100) {
-      flowMessage = 'Normal Flow: Typical recreational conditions. Moving at a steady, manageable pace.'
-      flowColor = '#10b981'
-    } else {
-      flowMessage = 'Low Flow: Water is moving very slowly. Generally safe for casual recreation.'
-      flowColor = '#60a5fa'
-    }
+    if (flow > 5000) { flowMessage = 'Severe / Flood Flow: Extremely dangerous, life-threatening currents.'; flowColor = '#ef4444' }
+    else if (flow > 2000) { flowMessage = 'Dangerous Flow: Very swift, powerful currents.'; flowColor = '#f97316' }
+    else if (flow > 500) { flowMessage = 'Fast Flow: Swift currents, hazardous for casual recreation.'; flowColor = '#f59e0b' }
+    else if (flow > 100) { flowMessage = 'Normal Flow: Typical recreational conditions.'; flowColor = '#10b981' }
+    else { flowMessage = 'Low Flow: Water moving very slowly.'; flowColor = '#60a5fa' }
   }
 
   return (
@@ -107,6 +162,9 @@ export default function GaugeDetail({ data }) {
             <div style={{ color: '#94a3b8' }}>
               Lat: {gaugeConfig.lat} | Lng: {gaugeConfig.lng}
             </div>
+            <div style={{ marginTop: 14 }}>
+              <NotificationToggle gaugeId={id} />
+            </div>
           </div>
 
           <div style={{ display: 'flex', gap: 32 }}>
@@ -122,32 +180,35 @@ export default function GaugeDetail({ data }) {
         </div>
       </div>
 
+      {gaugeAlerts.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <NwsAlertsBanner alerts={gaugeAlerts} />
+        </div>
+      )}
+
       <div className="gauge-detail-grid">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          <div className="glass-panel" style={{ borderLeft: `4px solid ${aiColor}` }}>
-            <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: '#f8fafc' }}>
-              <Cpu size={20} color={aiColor} />
-              AI Surge Predictor (Next 24h)
-            </h3>
-            <p style={{ fontSize: '1.1rem', lineHeight: 1.6, color: '#e2e8f0', marginBottom: forecast ? 24 : 0 }}>
-              {aiMessage}
-            </p>
-            {forecast && (
-              <div style={{ display: 'flex', gap: 24, background: 'rgba(0,0,0,0.2)', padding: 16, borderRadius: 8, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase' }}>Forecasted Rain</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{forecast.totalInches?.toFixed(2) || '0.00'} in</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase' }}>Max Intensity</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{forecast.maxHourlyInches?.toFixed(2) || '0.00'} in/hr</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase' }}>1hr Rise Rate</div>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 600 }}>{d.rates?.rise60m?.toFixed(2) || '0.00'} ft</div>
-                </div>
-              </div>
-            )}
+          <GaugeBriefingCard
+            briefing={briefing.briefing}
+            loading={briefing.loading}
+            error={briefing.error}
+            context={briefingContext}
+            onRegenerate={briefing.regenerate}
+            fetchedAt={briefing.fetchedAt}
+          />
+
+          <div className="glass-panel">
+            <h3 style={{ marginBottom: 16, color: '#f8fafc' }}>AHPS Observed vs Forecast</h3>
+            <AhpsForecastChart gauge={gaugeConfig} />
+          </div>
+
+          <div className="glass-panel">
+            <h3 style={{ marginBottom: 16, color: '#f8fafc' }}>Streamflow Forecast (NOAA NWM / Open-Meteo)</h3>
+            <StreamflowForecastChart
+              gauge={gaugeConfig}
+              observedFlow={d.flow}
+              observedTime={d.time}
+            />
           </div>
 
           <div className="glass-panel" style={{ borderLeft: `4px solid ${flowColor}` }}>
@@ -177,10 +238,7 @@ export default function GaugeDetail({ data }) {
 
           <div style={{ position: 'relative', height: 300, width: 60, background: 'rgba(0,0,0,0.3)', borderRadius: 30, border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden', margin: '0 auto' }}>
             <div style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              width: '100%',
+              position: 'absolute', bottom: 0, left: 0, width: '100%',
               height: `${fillPercent}%`,
               background: `var(--alert-${alertClass.toLowerCase()})`,
               transition: 'height 1s ease-in-out, background 0.5s',
@@ -189,12 +247,8 @@ export default function GaugeDetail({ data }) {
 
             {gaugeConfig.floodStageFt && (
               <div style={{
-                position: 'absolute',
-                bottom: `${floodLinePercent}%`,
-                left: -10,
-                width: 80,
-                borderBottom: '2px dashed #ef4444',
-                zIndex: 10
+                position: 'absolute', bottom: `${floodLinePercent}%`,
+                left: -10, width: 80, borderBottom: '2px dashed #ef4444', zIndex: 10
               }}>
                 <div style={{ position: 'absolute', right: -50, top: -8, color: '#ef4444', fontSize: '0.75rem', fontWeight: 'bold' }}>FLOOD</div>
               </div>

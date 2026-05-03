@@ -7,10 +7,13 @@ import { calculateRates, getAlertLevel, getHighestAlert, ALERT_LEVELS } from './
 import { detectSurges } from './lib/surgeEngine'
 import { logIncident } from './lib/incidentLog'
 import { formatCDT } from './lib/formatTime'
-import { Activity, AlertTriangle, Clock, WifiOff } from 'lucide-react'
+import { WifiOff } from 'lucide-react'
 
 import Dashboard from './pages/Dashboard'
 import GaugeDetail from './pages/GaugeDetail'
+import Incidents from './pages/Incidents'
+import AppHeader from './components/AppHeader'
+import { SentinelProvider } from './contexts/SentinelContext'
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value))
@@ -27,15 +30,9 @@ function getSentinelScore(d) {
   const probability = d.forecast?.maxProbability || 0
 
   return Math.round(clamp(
-    rise5m * 30 +
-    rise15m * 18 +
-    rise60m * 10 +
-    flow / 160 +
-    rainfall * 22 +
-    rainfallIntensity * 45 +
-    probability / 5,
-    0,
-    100
+    rise5m * 30 + rise15m * 18 + rise60m * 10 + flow / 160 +
+    rainfall * 22 + rainfallIntensity * 45 + probability / 5,
+    0, 100
   ))
 }
 
@@ -140,37 +137,25 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="dashboard-container">
-        <header className="header">
-          <div className="header-title">
-            <Activity size={32} color="#60a5fa" />
-            Guadalupe Sentinel
-          </div>
-          <div className="header-meta">
-            <div className={`alert-badge ${highestAlert}`}>
-              <AlertTriangle size={16} />
-              System Status: {ALERT_LEVELS[highestAlert]?.label || 'Normal'}
-            </div>
-            <div className="header-time" style={{ marginTop: '8px', fontWeight: '500' }}>
-              <Clock size={14} style={{ display: 'inline', verticalAlign: 'middle', marginRight: 4 }} />
-              Dashboard Refreshed: {lastUpdate ? formatCDT(lastUpdate) : 'Loading...'}
-            </div>
-          </div>
-        </header>
+      <SentinelProvider gaugesData={data} surgeEvents={surgeEvents}>
+        <div className="dashboard-container">
+          <AppHeader highestAlert={highestAlert} lastUpdate={lastUpdate} />
 
-        {fetchError && (
-          <div className="error-banner">
-            <WifiOff size={16} />
-            Data refresh failed — displaying last known values
-            {lastUpdate && <span> from {formatCDT(lastUpdate)}</span>}
-          </div>
-        )}
+          {fetchError && (
+            <div className="error-banner">
+              <WifiOff size={16} />
+              Data refresh failed — displaying last known values
+              {lastUpdate && <span> from {formatCDT(lastUpdate)}</span>}
+            </div>
+          )}
 
-        <Routes>
-          <Route path="/" element={<Dashboard data={data} surgeEvents={surgeEvents} />} />
-          <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
-        </Routes>
-      </div>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/gauge/:id" element={<GaugeDetail />} />
+            <Route path="/incidents" element={<Incidents />} />
+          </Routes>
+        </div>
+      </SentinelProvider>
     </BrowserRouter>
   )
 }

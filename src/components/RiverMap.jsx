@@ -1,8 +1,11 @@
 import { useEffect } from 'react'
-import { MapContainer, TileLayer, WMSTileLayer, Marker, Polyline, Tooltip, useMap } from 'react-leaflet'
+import { MapContainer, TileLayer, Marker, Polyline, Tooltip, useMap } from 'react-leaflet'
 import { useNavigate } from 'react-router-dom'
 import { GAUGES } from '../config/gauges'
 import { alertColor } from '../lib/alertColors'
+import AnimatedRadarLayer from './AnimatedRadarLayer'
+import MrmsQpeLayer, { MrmsQpeLegend } from './MrmsQpeLayer'
+import MapLayerControls, { useMapLayerPrefs } from './MapLayerControls'
 import L from 'leaflet'
 
 const getArrow = (rate) => {
@@ -11,7 +14,6 @@ const getArrow = (rate) => {
   return '—'
 }
 
-// Only draw the Guadalupe main stem — not cross-basin rivers
 const GUADALUPE_STEM_ORDERS = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9])
 
 function BoundsController() {
@@ -28,28 +30,23 @@ function BoundsController() {
 export default function RiverMap({ gauges }) {
   const sorted = [...GAUGES].sort((a, b) => a.order - b.order)
   const navigate = useNavigate()
+  const prefs = useMapLayerPrefs()
 
   const guadalupeStem = sorted
     .filter(g => GUADALUPE_STEM_ORDERS.has(g.order))
     .map(g => [g.lat, g.lng])
 
   return (
-    <MapContainer center={[29.9, -99.1]} zoom={8} style={{ height: 400, width: '100%', zIndex: 0 }}>
+    <MapContainer center={[29.9, -99.1]} zoom={8} style={{ height: 480, width: '100%', zIndex: 0 }}>
       <BoundsController />
 
       <TileLayer
         url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}"
-        attribution="Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ, TomTom, Intermap, iPC, USGS, FAO, NPS, NRCAN, GeoBase, Kadaster NL, Ordnance Survey, Esri Japan, METI, Esri China (Hong Kong), and the GIS User Community"
+        attribution="Tiles &copy; Esri"
       />
 
-      <WMSTileLayer
-        url="https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi"
-        layers="nexrad-n0r-900913"
-        format="image/png"
-        transparent={true}
-        opacity={0.6}
-        attribution="Weather data &copy; IEM Nexrad"
-      />
+      {prefs.radar && <AnimatedRadarLayer opacity={0.6} />}
+      {prefs.qpe && <MrmsQpeLayer window={prefs.qpeWindow} opacity={0.55} />}
 
       <Polyline positions={guadalupeStem} pathOptions={{ color: '#3b82f6', weight: 4, opacity: 0.8 }} />
 
@@ -72,9 +69,7 @@ export default function RiverMap({ gauges }) {
             key={g.id}
             position={[g.lat, g.lng]}
             icon={customIcon}
-            eventHandlers={{
-              click: () => navigate(`/gauge/${g.id}`)
-            }}
+            eventHandlers={{ click: () => navigate(`/gauge/${g.id}`) }}
           >
             <Tooltip>
               <div>
@@ -89,6 +84,9 @@ export default function RiverMap({ gauges }) {
           </Marker>
         )
       })}
+
+      <MapLayerControls prefs={prefs} position="topright" />
+      {prefs.qpe && <MrmsQpeLegend window={prefs.qpeWindow} position="bottomright" />}
     </MapContainer>
   )
 }
