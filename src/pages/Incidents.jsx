@@ -240,7 +240,7 @@ export default function Incidents() {
     selectedGauges.length > 0 || selectedSeverities.length > 0 || !!fromDate || !!toDate || !!search
 
   return (
-    <div className="dashboard-container">
+    <div className="incidents-page">
       <Link to="/" className="incidents-back">
         <ArrowLeft size={16} /> Back to Dashboard
       </Link>
