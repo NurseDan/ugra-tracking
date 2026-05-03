@@ -186,7 +186,7 @@ export default function GaugeDetail() {
             </div>
             <div className="metric">
               <div className="metric-label">Flow Rate</div>
-              <div><span className="metric-value">{d.flow ? d.flow.toLocaleString() : '—'}</span><span className="metric-unit"> cfs</span></div>
+              <div><span className="metric-value">{d.flow !== undefined && d.flow !== null ? d.flow.toLocaleString() : '—'}</span><span className="metric-unit"> cfs</span></div>
             </div>
           </div>
         </div>
