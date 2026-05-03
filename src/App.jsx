@@ -14,6 +14,7 @@ import { WifiOff } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import GaugeDetail from './pages/GaugeDetail'
 import Incidents from './pages/Incidents'
+import MyAlerts from './pages/MyAlerts'
 import AppHeader from './components/AppHeader'
 import { SentinelProvider } from './contexts/SentinelContext'
 
@@ -248,6 +249,7 @@ export default function App() {
             <Route path="/" element={<Dashboard forecasts={cachedForecasts} />} />
             <Route path="/gauge/:id" element={<GaugeDetail />} />
             <Route path="/incidents" element={<Incidents />} />
+            <Route path="/my-alerts" element={<MyAlerts />} />
           </Routes>
         </div>
       </SentinelProvider>

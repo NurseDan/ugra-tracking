@@ -207,6 +207,21 @@ async function networkFirst(req, cacheName) {
   }
 }
 
+self.addEventListener('push', (event) => {
+  let data = {}
+  try { data = event.data ? event.data.json() : {} } catch { data = { title: 'Guadalupe Sentinel', body: event.data?.text?.() || '' } }
+  const title = data.title || 'Guadalupe Sentinel'
+  const options = {
+    body: data.body || '',
+    tag: data.tag || 'sentinel-alert',
+    data: { url: data.url || '/', incidentId: data.incidentId },
+    icon: '/icons/icon-192.png',
+    badge: '/icons/favicon-32.png',
+    requireInteraction: true
+  }
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const targetUrl = (event.notification.data && event.notification.data.url) || '/'

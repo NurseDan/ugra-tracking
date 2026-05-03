@@ -257,8 +257,22 @@ export default function Incidents() {
             disabled={filtered.length === 0}
             title={filtered.length === 0 ? 'Nothing to export' : 'Download filtered incidents as CSV'}
           >
-            <Download size={14} /> Export CSV
+            <Download size={14} /> Export local CSV
           </button>
+          <a
+            className="incidents-btn"
+            href="/api/export/incidents.csv"
+            title="Download the server's full 5-year incident archive as CSV"
+          >
+            <Download size={14} /> Server CSV (5y)
+          </a>
+          <a
+            className="incidents-btn"
+            href="/api/export/incidents.json"
+            title="Download the server's full 5-year incident archive as JSON"
+          >
+            <Download size={14} /> Server JSON (5y)
+          </a>
           <button
             type="button"
             className="incidents-btn incidents-btn--danger"

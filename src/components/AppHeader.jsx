@@ -33,6 +33,9 @@ export default function AppHeader({ highestAlert, lastUpdate }) {
             <NavLink to="/incidents" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
               <History size={14} /> Incidents
             </NavLink>
+            <NavLink to="/my-alerts" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
+              <Bell size={14} /> My Alerts
+            </NavLink>
             <button
               type="button"
               className="app-header__notif-btn"

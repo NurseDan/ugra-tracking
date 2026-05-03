@@ -10,14 +10,25 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/connect-pg-simple": "^7.0.3",
+    "@types/express-session": "^1.19.0",
+    "@types/memoizee": "^0.4.12",
+    "@types/passport": "^1.0.17",
     "@vitejs/plugin-react": "^4.3.4",
+    "connect-pg-simple": "^10.0.0",
     "express": "^5.1.0",
+    "express-session": "^1.19.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.469.0",
+    "memoizee": "^0.4.17",
+    "openid-client": "^6.8.4",
+    "passport": "^0.7.0",
+    "pg": "^8.20.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",
     "react-router-dom": "^7.14.2",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "web-push": "^3.6.7"
   }
 }
