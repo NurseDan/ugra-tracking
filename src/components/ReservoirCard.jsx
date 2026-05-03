@@ -1,5 +1,6 @@
 import { ArrowDownRight, ArrowUpRight, Droplet, Minus, RefreshCw } from 'lucide-react'
 import { useReservoirStatus } from '../lib/useReservoirStatus.js'
+import { useSentinel } from '../contexts/SentinelContext.jsx'
 import { formatCDT } from '../lib/formatTime.js'
 import './ReservoirCard.css'
 
@@ -68,7 +69,12 @@ function Skeleton() {
 const STALE_AFTER_MS = 30 * 60 * 1000
 
 export default function ReservoirCard({ className = '' } = {}) {
-  const { status, loading, error, lastUpdated, refresh } = useReservoirStatus()
+  const ctx = useSentinel()
+  const status = ctx.reservoirStatus
+  const loading = ctx.reservoirLoading
+  const error = ctx.reservoirError
+  const lastUpdated = ctx.reservoirLastUpdated
+  const refresh = ctx.refreshReservoir
 
   const isInitialLoading = loading && !status
   const hasData = !!status

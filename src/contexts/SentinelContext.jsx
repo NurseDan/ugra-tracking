@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useMemo } from 'react'
 import { GAUGES } from '../config/gauges'
 import { useNwsAlerts } from '../hooks/useNwsAlerts'
+import { useReservoirStatus } from '../lib/useReservoirStatus'
 import { useAlertNotifier } from '../hooks/useAlertNotifier'
 import { useBasinBriefing } from '../hooks/useGaugeBriefing'
 import { buildGaugeContext } from '../lib/aiBriefing'
@@ -19,6 +20,7 @@ function alertTouchesGauge(alert, gauge) {
 
 export function SentinelProvider({ gaugesData, surgeEvents = [], children }) {
   const nws = useNwsAlerts(null, GAUGES)
+  const reservoir = useReservoirStatus()
 
   // Build lightweight per-gauge contexts for the basin briefing. We omit
   // ahps/streamflow forecasts here (those are loaded only when a gauge
@@ -59,6 +61,11 @@ export function SentinelProvider({ gaugesData, surgeEvents = [], children }) {
       nwsLoading: nws.loading,
       nwsError: nws.error,
       refreshNws: nws.refresh,
+      reservoirStatus: reservoir.status,
+      reservoirLoading: reservoir.loading,
+      reservoirError: reservoir.error,
+      reservoirLastUpdated: reservoir.lastUpdated,
+      refreshReservoir: reservoir.refresh,
       basinBriefing: basin,
       alertsForGauge: (gaugeId) => {
         const g = GAUGES.find((x) => x.id === gaugeId)
@@ -66,7 +73,7 @@ export function SentinelProvider({ gaugesData, surgeEvents = [], children }) {
         return (nws.alerts || []).filter((a) => alertTouchesGauge(a, g))
       }
     }),
-    [gaugesData, surgeEvents, nws.alerts, nws.loading, nws.error, nws.refresh, basin]
+    [gaugesData, surgeEvents, nws.alerts, nws.loading, nws.error, nws.refresh, reservoir, basin]
   )
 
   return <SentinelContext.Provider value={value}>{children}</SentinelContext.Provider>
