@@ -117,13 +117,28 @@ export default function App() {
   async function fetchData() {
     try {
       const ids = GAUGES.map(g => g.id)
-      const [usgsData, ...weatherForecasts] = await Promise.all([
+      // USGS is the only required call. Weather forecasts (Open-Meteo /
+      // weather.gov) are best-effort: if any rate-limits or fails we still
+      // want gauge data, the alert banner, and the lastUpdate timestamp
+      // to refresh. Use allSettled + per-call catch so a single 429 from
+      // weather.gov doesn't strand the dashboard in a "Loading…" state.
+      const [usgsResult, ...weatherResults] = await Promise.allSettled([
         fetchUSGSGauges(ids),
-        ...GAUGES.map(g => fetchPrecipitationForecast(g.lat, g.lng))
+        ...GAUGES.map(g =>
+          fetchPrecipitationForecast(g.lat, g.lng).catch(() => null)
+        )
       ])
 
+      if (usgsResult.status !== 'fulfilled' || !usgsResult.value) {
+        throw usgsResult.reason || new Error('USGS fetch failed')
+      }
+      const usgsData = usgsResult.value
+
       const forecastByGauge = {}
-      GAUGES.forEach((g, i) => { forecastByGauge[g.id] = weatherForecasts[i] })
+      GAUGES.forEach((g, i) => {
+        const r = weatherResults[i]
+        forecastByGauge[g.id] = r && r.status === 'fulfilled' ? r.value : null
+      })
 
       const processed = {}
 
