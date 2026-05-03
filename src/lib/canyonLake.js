@@ -27,11 +27,6 @@ const CANYON_STATIC = Object.freeze({
   inflowSiteName: 'Guadalupe Rv at Spring Branch (USGS 08167500)'
 })
 
-const CSV_PROXIES = [
-  (url) => url,
-  (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-  (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`
-]
 
 function parseCsvLine(line) {
   const out = []
@@ -77,29 +72,17 @@ function num(v) {
   return Number.isFinite(n) ? n : null
 }
 
-async function fetchCsvWithFallback(url, signal) {
-  let lastErr = null
-  for (const wrap of CSV_PROXIES) {
-    try {
-      const res = await fetch(wrap(url), { signal })
-      if (!res.ok) {
-        lastErr = new Error(`HTTP ${res.status}`)
-        continue
-      }
-      const text = await res.text()
-      if (text && text.length > 50) return text
-      lastErr = new Error('Empty response')
-    } catch (err) {
-      if (err?.name === 'AbortError') throw err
-      lastErr = err
-    }
-  }
-  throw lastErr || new Error('All CSV sources failed')
+async function fetchCsv(url, signal) {
+  const res = await fetch(url, { signal })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const text = await res.text()
+  if (!text || text.length <= 50) throw new Error('Empty response')
+  return text
 }
 
 async function fetchTwdbCanyon(signal) {
   try {
-    const text = await fetchCsvWithFallback(TWDB_INDIVIDUAL_URL, signal)
+    const text = await fetchCsv(TWDB_INDIVIDUAL_URL, signal)
     const rows = parseCsv(text)
     if (rows.length > 0) {
       const latest = rows[rows.length - 1]
@@ -116,7 +99,7 @@ async function fetchTwdbCanyon(signal) {
     if (err?.name === 'AbortError') throw err
   }
 
-  const text = await fetchCsvWithFallback(TWDB_RECENT_URL, signal)
+  const text = await fetchCsv(TWDB_RECENT_URL, signal)
   const rows = parseCsv(text)
   const canyon = rows.find(
     (r) =>
