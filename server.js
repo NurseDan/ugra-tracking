@@ -70,25 +70,28 @@ app.post('/api/chat', async (req, res) => {
 
 // --- Bootstrap --------------------------------------------------------
 
-async function main() {
+try {
   await initSchema()
+} catch (e) {
+  console.warn('[db] initSchema failed. Database features may be broken.')
+}
 
-  // Auth must be registered before the api router so /api/me/* can use sessions.
-  let authReady = false
-  try {
-    authReady = await setupAuth(app)
-  } catch (err) {
-    console.warn('[auth] setup failed:', err.message)
-  }
+let authReady = false
+try {
+  authReady = await setupAuth(app)
+} catch (err) {
+  console.warn('[auth] setup failed:', err.message)
+}
 
-  if (!authReady) {
-    // Stub the auth-required endpoints so the public app still loads.
-    app.get('/api/auth/user', (_req, res) => res.status(401).json({ message: 'Auth not configured' }))
-    app.get('/api/login', (_req, res) => res.status(503).send('Auth not configured on this deployment'))
-  }
+if (!authReady) {
+  // Stub the auth-required endpoints so the public app still loads.
+  app.get('/api/auth/user', (_req, res) => res.status(401).json({ message: 'Auth not configured' }))
+  app.get('/api/login', (_req, res) => res.status(503).send('Auth not configured on this deployment'))
+}
 
-  app.use('/api', apiRouter)
+app.use('/api', apiRouter)
 
+if (!process.env.VERCEL) {
   // Serve the built SPA in production (single-port deploy).
   const distDir = path.join(__dirname, 'dist')
   if (existsSync(distDir)) {
@@ -109,7 +112,5 @@ async function main() {
   })
 }
 
-main().catch(err => {
-  console.error('[server] fatal:', err)
-  process.exit(1)
-})
+export default app
+

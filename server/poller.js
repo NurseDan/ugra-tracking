@@ -246,7 +246,7 @@ async function safe(name, fn) {
 }
 
 let tickInFlight = false
-async function tick() {
+export async function tick() {
   if (tickInFlight) return
   tickInFlight = true
   try {
