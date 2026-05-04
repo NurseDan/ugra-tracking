@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, Marker, Polyline, Tooltip, useMap } from 'reac
 import { useNavigate } from 'react-router-dom'
 import { GAUGES } from '../config/gauges'
 import { alertColor } from '../lib/alertColors'
-import AnimatedRadarLayer from './AnimatedRadarLayer'
+import NexradRadarLayer from './NexradRadarLayer'
 import MrmsQpeLayer, { MrmsQpeLegend } from './MrmsQpeLayer'
 import MapLayerControls, { useMapLayerPrefs } from './MapLayerControls'
 import L from 'leaflet'
@@ -45,7 +45,7 @@ export default function RiverMap({ gauges }) {
         attribution="Tiles &copy; Esri"
       />
 
-      {prefs.radar && <AnimatedRadarLayer opacity={0.6} />}
+      {prefs.radar && <NexradRadarLayer opacity={0.6} />}
       {prefs.qpe && <MrmsQpeLayer window={prefs.qpeWindow} opacity={0.55} />}
 
       <Polyline positions={guadalupeStem} pathOptions={{ color: '#3b82f6', weight: 4, opacity: 0.8 }} />

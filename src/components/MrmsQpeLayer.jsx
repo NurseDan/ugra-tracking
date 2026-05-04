@@ -1,6 +1,6 @@
 import { WMSTileLayer } from 'react-leaflet'
 import { getMrmsQpeLayer, DEFAULT_MRMS_WINDOW } from '../lib/radarLayers.js'
-import './AnimatedRadarLayer.css'
+import './MrmsQpeLayer.css'
 
 const SCALE_TICKS = ['0', '0.25', '1', '2', '4', '6', '8+']
 

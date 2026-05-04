@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { MRMS_WINDOWS, DEFAULT_MRMS_WINDOW } from '../lib/radarLayers.js'
-import './AnimatedRadarLayer.css'
+import './MrmsQpeLayer.css'
 
 const STORAGE_KEY = 'gs:mapLayerPrefs:v1'
 

@@ -223,6 +223,30 @@ export async function fetchNwm(reachId, range = 'medium_range') {
   }
 }
 
+function parseCsvLine(line) {
+  const out = []
+  let cur = ''
+  let inQuotes = false
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i]
+    if (ch === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        cur += '"'
+        i++
+      } else {
+        inQuotes = !inQuotes
+      }
+    } else if (ch === ',' && !inQuotes) {
+      out.push(cur)
+      cur = ''
+    } else {
+      cur += ch
+    }
+  }
+  out.push(cur)
+  return out
+}
+
 export async function fetchCanyonLake() {
   // Lightweight: USGS inflow + release stations. TWDB CSV reservoir levels.
   const USGS = (id) => `https://waterservices.usgs.gov/nwis/iv/?format=json&sites=${id}&parameterCd=00060&period=PT6H&siteStatus=all`
@@ -245,8 +269,8 @@ export async function fetchCanyonLake() {
       const text = await r.text()
       const lines = text.split(/\r?\n/).filter(l => l && !l.startsWith('#'))
       if (lines.length < 2) return null
-      const header = lines[0].split(',').map(s => s.trim())
-      const last = lines.at(-1).split(',')
+      const header = parseCsvLine(lines[0]).map(s => s.trim())
+      const last = parseCsvLine(lines.at(-1))
       const row = {}
       header.forEach((h, i) => { row[h] = last[i] })
       return {
