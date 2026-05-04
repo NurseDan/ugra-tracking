@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node server.js & vite",
-    "server": "node server.js",
+    "dev": "node --env-file-if-exists=.env server.js & vite",
+    "server": "node --env-file-if-exists=.env server.js",
     "build": "vite build",
     "preview": "vite preview"
   },
