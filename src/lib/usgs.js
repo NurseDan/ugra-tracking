@@ -1,3 +1,5 @@
+import { API_BASE } from './api.js'
+
 const USGS_STAGE_PARAMETER = '00065'
 const USGS_FLOW_PARAMETER = '00060'
 const INVALID_VALUE_FLOOR = -900000
@@ -118,7 +120,7 @@ async function fetchUSGSChunk(ids) {
 // server is unreachable or returned no data for the requested ids.
 async function fetchFromServer(ids) {
   try {
-    const res = await fetch('/api/gauges/current', { credentials: 'same-origin' })
+    const res = await fetch(`${API_BASE}/api/gauges/current`, { credentials: 'same-origin' })
     if (!res.ok) return null
     const json = await res.json()
     const out = {}

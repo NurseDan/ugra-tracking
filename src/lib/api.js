@@ -1,7 +1,12 @@
 // Thin client wrapper around the server's /api/* endpoints.
 
+export const API_BASE = (typeof window !== 'undefined' && window.Capacitor?.isNative)
+  ? 'https://ugra-b9zkhu1q3-daniel-wiglesworths-projects.vercel.app'
+  : ''
+
 async function jsonFetch(url, init) {
-  const res = await fetch(url, { credentials: 'same-origin', ...init })
+  const fullUrl = url.startsWith('/') ? `${API_BASE}${url}` : url
+  const res = await fetch(fullUrl, { credentials: 'same-origin', ...init })
   if (res.status === 401) throw new Error('401: Unauthorized')
   if (!res.ok) throw new Error(`${res.status}: ${await res.text().catch(() => '')}`)
   return res.json()
@@ -50,5 +55,5 @@ export async function getServerIncidents(limit = 200) {
 
 export function exportUrl(kind, fmt, params = {}) {
   const qs = new URLSearchParams(params).toString()
-  return `/api/export/${kind}.${fmt}${qs ? `?${qs}` : ''}`
+  return `${API_BASE}/api/export/${kind}.${fmt}${qs ? `?${qs}` : ''}`
 }

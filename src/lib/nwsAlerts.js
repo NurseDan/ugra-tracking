@@ -1,3 +1,5 @@
+import { API_BASE } from './api.js'
+
 const NWS_API_BASE = 'https://api.weather.gov'
 const USER_AGENT = '(guadalupe-sentinel, contact@guadalupe-sentinel.local)'
 
@@ -97,7 +99,7 @@ function statesForBbox(bbox) {
 // the bbox, then post-filter the returned alert polygons against the bbox.
 async function fetchActiveAlertsFromServer(signal) {
   try {
-    const res = await fetch('/api/source/nws_alerts', { credentials: 'same-origin', signal })
+    const res = await fetch(`${API_BASE}/api/source/nws_alerts`, { credentials: 'same-origin', signal })
     if (!res.ok) return null
     const json = await res.json()
     const alerts = Array.isArray(json?.alerts) ? json.alerts : null

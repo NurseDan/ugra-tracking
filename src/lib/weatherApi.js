@@ -1,3 +1,5 @@
+import { API_BASE } from './api.js'
+
 // Server-first lookup: the poller caches per-gauge forecasts hourly.
 // We only know lat/lng here, so we fall through to direct upstream when
 // the caller didn't pass a gauge id. fetchPrecipitationForecast (below)
@@ -54,12 +56,12 @@ async function fetchWeatherFromServer(lat, lng) {
   // matches the requested coordinates closely (within ~0.05deg ~= 3 mi).
   // The server already standardized the shape, so we just trim to 24h.
   try {
-    const res = await fetch('/api/gauges', { credentials: 'same-origin' })
+    const res = await fetch(`${API_BASE}/api/gauges`, { credentials: 'same-origin' })
     if (!res.ok) return null
     const gauges = await res.json()
     const match = gauges.find(g => Math.abs(g.lat - lat) < 0.05 && Math.abs(g.lng - lng) < 0.05)
     if (!match) return null
-    const cr = await fetch(`/api/source/weather:${match.id}`, { credentials: 'same-origin' })
+    const cr = await fetch(`${API_BASE}/api/source/weather:${match.id}`, { credentials: 'same-origin' })
     if (!cr.ok) return null
     const p = await cr.json()
     if (!p || typeof p.totalInches !== 'number') return null

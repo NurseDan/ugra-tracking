@@ -1,3 +1,5 @@
+import { API_BASE } from './api.js'
+
 // NOTE on data sources: the original task spec called for a TWDB JSON
 // endpoint and TWDB release rate. Verified during implementation that
 // waterdatafortexas.org publishes only CSV (no JSON) and that the
@@ -144,7 +146,7 @@ function safePercentFull(volume, capacity) {
 
 async function fetchCanyonFromServer(signal) {
   try {
-    const res = await fetch('/api/source/canyon_lake', { credentials: 'same-origin', signal })
+    const res = await fetch(`${API_BASE}/api/source/canyon_lake`, { credentials: 'same-origin', signal })
     if (!res.ok) return null
     const p = await res.json()
     if (!p || (p.poolElevationFt == null && p.releaseCfs == null && p.inflowCfs == null)) return null

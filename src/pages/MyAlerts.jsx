@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { GAUGES } from '../config/gauges'
 import {
   getCurrentUser, listSubscriptions, createSubscription,
-  deleteSubscription, testSubscription
+  deleteSubscription, testSubscription, API_BASE
 } from '../lib/api'
 import { subscribeBrowserToPush } from '../lib/pushSubscribe'
 
@@ -38,7 +38,7 @@ export default function MyAlerts() {
       if (u) {
         const [s, h] = await Promise.all([
           listSubscriptions(),
-          fetch('/api/me/notifications', { credentials: 'same-origin' })
+          fetch(`${API_BASE}/api/me/notifications`, { credentials: 'same-origin' })
             .then(r => r.ok ? r.json() : [])
         ])
         setSubs(s); setHistory(h)
@@ -92,7 +92,7 @@ export default function MyAlerts() {
         <h2>My Alerts</h2>
         <p>Sign in with your Replit account to manage personal alert subscriptions. The dashboard,
            history, and exports stay public — only personalized alerts require an account.</p>
-        <a href="/api/login" style={{
+        <a href={`${API_BASE}/api/login`} style={{
           display: 'inline-block', padding: '10px 16px', background: '#3b82f6',
           color: '#fff', textDecoration: 'none', borderRadius: 6
         }}>Sign in with Replit</a>
@@ -105,7 +105,7 @@ export default function MyAlerts() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2 style={{ margin: 0 }}>My Alerts</h2>
         <div style={{ fontSize: 14, color: '#888' }}>
-          {user.email || user.id} · <a href="/api/logout">Sign out</a>
+          {user.email || user.id} · <a href={`${API_BASE}/api/logout`}>Sign out</a>
         </div>
       </div>
       <p style={{ color: '#aaa', fontSize: 14 }}>

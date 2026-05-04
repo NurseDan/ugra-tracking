@@ -9,6 +9,7 @@ import { formatCDT } from '../lib/formatTime'
 import {
   listIncidents, clearIncidents, subscribe, logIncident
 } from '../lib/incidentLog'
+import { API_BASE } from '../lib/api.js'
 import './Incidents.css'
 
 const SEVERITY_ORDER = ['YELLOW', 'ORANGE', 'RED', 'BLACK']
@@ -261,14 +262,14 @@ export default function Incidents() {
           </button>
           <a
             className="incidents-btn"
-            href="/api/export/incidents.csv"
+            href={`${API_BASE}/api/export/incidents.csv`}
             title="Download the server's full 5-year incident archive as CSV"
           >
             <Download size={14} /> Server CSV (5y)
           </a>
           <a
             className="incidents-btn"
-            href="/api/export/incidents.json"
+            href={`${API_BASE}/api/export/incidents.json`}
             title="Download the server's full 5-year incident archive as JSON"
           >
             <Download size={14} /> Server JSON (5y)

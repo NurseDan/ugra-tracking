@@ -1,4 +1,5 @@
 import { ALERT_LEVELS } from './alertEngine'
+import { API_BASE } from './api'
 
 const DEFAULT_MODEL = 'gpt-4o-mini'
 const OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions'
@@ -75,7 +76,7 @@ function unavailable(reason = 'AI briefing unavailable — add OPENAI_API_KEY to
 
 export function createProxyProvider(options = {}) {
   const {
-    endpoint = '/api/chat',
+    endpoint = `${API_BASE}/api/chat`,
     model = DEFAULT_MODEL,
     fetchImpl = (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : null)
   } = options
