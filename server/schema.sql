@@ -7,9 +7,18 @@ CREATE TABLE IF NOT EXISTS users (
   first_name    text,
   last_name     text,
   profile_image_url text,
+  provider      text not null default 'google',
+  provider_id   text,
+  plan          text not null default 'free',
+  plan_expires_at timestamptz,
   created_at    timestamptz default now(),
   updated_at    timestamptz default now()
 );
+-- Safe migrations for existing deployments
+ALTER TABLE users ADD COLUMN IF NOT EXISTS provider      text not null default 'google';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id   text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan          text not null default 'free';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at timestamptz;
 
 CREATE TABLE IF NOT EXISTS sessions (
   sid     varchar primary key,
@@ -131,6 +140,14 @@ CREATE INDEX IF NOT EXISTS idx_notifications_dedup ON notifications_sent(subscri
 CREATE UNIQUE INDEX IF NOT EXISTS uq_notifications_dedup_sent
   ON notifications_sent(subscription_id, incident_id, channel)
   WHERE status = 'sent';
+
+-- Per-user AI usage counter (one row per user per calendar day).
+CREATE TABLE IF NOT EXISTS ai_usage (
+  user_id       text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  date          date NOT NULL DEFAULT CURRENT_DATE,
+  request_count int  NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, date)
+);
 
 -- VAPID keypair (single row).
 CREATE TABLE IF NOT EXISTS vapid_keys (

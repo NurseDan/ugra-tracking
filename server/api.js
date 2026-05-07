@@ -5,6 +5,7 @@ import { isAuthenticated } from './auth.js'
 import { getPublicKey } from './push.js'
 import { validateWebhookUrl } from './webhooks.js'
 import { dispatchToSubscription } from './alertEngine.js'
+import { limitsFor } from './plans.js'
 
 const router = Router()
 
@@ -13,7 +14,7 @@ const ALLOWED_CHANNELS = new Set(['push', 'email', 'sms', 'webhook'])
 const VALID_GAUGE_IDS = new Set(GAUGES.map(g => g.id))
 
 function userId(req) {
-  return req.user?.claims?.sub
+  return req.user?.id ?? (req.user?.claims?.sub ? `google:${req.user.claims.sub}` : undefined)
 }
 
 // --- Read APIs ---------------------------------------------------------
@@ -284,6 +285,17 @@ router.post('/me/subscriptions', isAuthenticated, async (req, res) => {
     ? b.nws_event_filter.map(s => String(s).slice(0, 80))
     : []
 
+  const uid = userId(req)
+  const { rows: [userRow] } = await query('SELECT plan FROM users WHERE id = $1', [uid])
+  const limits = limitsFor(userRow?.plan)
+  const { rows: [{ count }] } = await query(
+    'SELECT COUNT(*) FROM alert_subscriptions WHERE user_id = $1', [uid])
+  if (Number(count) >= limits.maxSubscriptions)
+    return res.status(403).json({ message: `Subscription limit reached (${limits.maxSubscriptions}) for your plan.` })
+  const badChannels = channels.filter(c => !limits.allowedChannels.includes(c))
+  if (badChannels.length)
+    return res.status(403).json({ message: `Channel(s) not available on your plan: ${badChannels.join(', ')}` })
+
   const r = await query(
     `INSERT INTO alert_subscriptions
        (user_id, gauge_id, ugc_codes, nws_event_filter, min_level, channels,
@@ -292,7 +304,7 @@ router.post('/me/subscriptions', isAuthenticated, async (req, res) => {
      VALUES ($1,$2,$3::jsonb,$4::jsonb,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,true)
      RETURNING id`,
     [
-      userId(req), gaugeId, JSON.stringify(ugcCodes), JSON.stringify(eventFilter),
+      uid, gaugeId, JSON.stringify(ugcCodes), JSON.stringify(eventFilter),
       minLevel, JSON.stringify(channels),
       b.email || null, b.phone || null, b.webhook_url || null, b.webhook_secret || null,
       b.push?.endpoint || null, b.push?.keys?.p256dh || null, b.push?.keys?.auth || null

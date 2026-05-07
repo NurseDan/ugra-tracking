@@ -90,12 +90,12 @@ export default function MyAlerts() {
     return (
       <div style={{ padding: 24, maxWidth: 640 }}>
         <h2>My Alerts</h2>
-        <p>Sign in with your Replit account to manage personal alert subscriptions. The dashboard,
+        <p>Sign in to manage personal alert subscriptions. The dashboard,
            history, and exports stay public — only personalized alerts require an account.</p>
         <a href="/api/login" style={{
           display: 'inline-block', padding: '10px 16px', background: '#3b82f6',
           color: '#fff', textDecoration: 'none', borderRadius: 6
-        }}>Sign in with Replit</a>
+        }}>Sign in with Google</a>
       </div>
     )
   }
@@ -151,7 +151,7 @@ export default function MyAlerts() {
           ))}
         </fieldset>
         {channels.email && (
-          <label>Email (leave blank to use your Replit account email):
+          <label>Email address for alert delivery:
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={{ marginLeft: 8, width: 280 }} />
           </label>
         )}

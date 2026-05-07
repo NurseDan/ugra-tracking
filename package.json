@@ -22,6 +22,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^0.469.0",
     "memoizee": "^0.4.17",
+    "nodemailer": "^8.0.7",
     "openid-client": "^6.8.4",
     "passport": "^0.7.0",
     "pg": "^8.20.0",

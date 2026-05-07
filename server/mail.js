@@ -1,41 +1,24 @@
-// Replit Mail wrapper (JS port of the Replit Mail blueprint snippet).
-// Sends to the verified Replit email of the workspace owner — used for
-// alert delivery to logged-in subscribers.
-import { promisify } from 'node:util'
-import { execFile } from 'node:child_process'
+import nodemailer from 'nodemailer'
 
-const exec = promisify(execFile)
-
-async function getAuth() {
-  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME
-  if (!hostname) throw new Error('REPLIT_CONNECTORS_HOSTNAME not set')
-  const { stdout } = await exec(
-    'replit',
-    ['identity', 'create', '--audience', `https://${hostname}`],
-    { encoding: 'utf8' }
-  )
-  const token = stdout.trim()
-  if (!token) throw new Error('Replit identity token not available')
-  return { authToken: `Bearer ${token}`, hostname }
-}
+const transporter = nodemailer.createTransport({
+  host:   process.env.SMTP_HOST,
+  port:   Number(process.env.SMTP_PORT ?? 587),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS
+  }
+})
 
 export async function sendEmail({ subject, text, html, to }) {
-  const { authToken, hostname } = await getAuth()
-  const body = { subject, text, html }
-  if (to) body.to = to
-  const res = await fetch(`https://${hostname}/api/v2/mailer/send`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Replit-Authentication': authToken
-    },
-    body: JSON.stringify(body)
+  if (!process.env.SMTP_HOST) throw new Error('SMTP not configured')
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM ?? process.env.SMTP_USER,
+    to,
+    subject,
+    text,
+    html
   })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.message || `Mailer HTTP ${res.status}`)
-  }
-  return res.json()
 }
 
 export async function sendAlertEmail(sub, incident) {
