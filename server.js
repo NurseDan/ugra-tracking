@@ -6,10 +6,15 @@ import { initSchema, query } from './server/db.js'
 import { startPoller } from './server/poller.js'
 import { setupAuth } from './server/auth.js'
 import apiRouter from './server/api.js'
+import billingRouter, { handleStripeWebhook } from './server/billing.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
+
+// Stripe webhooks must receive the raw body before express.json parses it.
+app.post('/api/billing/webhook', express.raw({ type: 'application/json' }), handleStripeWebhook)
+
 app.use(express.json({ limit: '64kb' }))
 
 // --- Existing OpenAI proxy --------------------------------------------
@@ -88,6 +93,7 @@ async function main() {
   }
 
   app.use('/api', apiRouter)
+  app.use('/api/billing', billingRouter)
 
   // Serve the built SPA in production (single-port deploy).
   const distDir = path.join(__dirname, 'dist')

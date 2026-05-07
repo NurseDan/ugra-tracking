@@ -3,7 +3,13 @@
 async function jsonFetch(url, init) {
   const res = await fetch(url, { credentials: 'same-origin', ...init })
   if (res.status === 401) throw new Error('401: Unauthorized')
-  if (!res.ok) throw new Error(`${res.status}: ${await res.text().catch(() => '')}`)
+  if (!res.ok) {
+    let body = {}
+    try { body = await res.json() } catch { body = { error: await res.text().catch(() => '') } }
+    const err = new Error(body.error || `${res.status}: request failed`)
+    if (body.upgrade) err.upgrade = true
+    throw err
+  }
   return res.json()
 }
 
@@ -51,4 +57,12 @@ export async function getServerIncidents(limit = 200) {
 export function exportUrl(kind, fmt, params = {}) {
   const qs = new URLSearchParams(params).toString()
   return `/api/export/${kind}.${fmt}${qs ? `?${qs}` : ''}`
+}
+
+export async function createCheckoutSession() {
+  return jsonFetch('/api/billing/create-checkout-session', { method: 'POST' })
+}
+
+export async function createPortalSession() {
+  return jsonFetch('/api/billing/portal', { method: 'POST' })
 }

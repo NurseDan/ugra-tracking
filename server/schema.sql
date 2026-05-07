@@ -10,6 +10,14 @@ CREATE TABLE IF NOT EXISTS users (
   created_at    timestamptz default now(),
   updated_at    timestamptz default now()
 );
+-- Local (email/password) auth columns — added via ALTER so existing deployments upgrade cleanly.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_provider text NOT NULL DEFAULT 'replit';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text;
+-- Stripe billing columns.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan text NOT NULL DEFAULT 'free';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_status text;
 
 CREATE TABLE IF NOT EXISTS sessions (
   sid     varchar primary key,

@@ -16,6 +16,9 @@ import GaugeDetail from './pages/GaugeDetail'
 import Incidents from './pages/Incidents'
 import MyAlerts from './pages/MyAlerts'
 import Exports from './pages/Exports'
+import Login from './pages/Login'
+import Register from './pages/Register'
+import Pricing from './pages/Pricing'
 import AppHeader from './components/AppHeader'
 import { SentinelProvider } from './contexts/SentinelContext'
 
@@ -252,6 +255,9 @@ export default function App() {
             <Route path="/incidents" element={<Incidents />} />
             <Route path="/my-alerts" element={<MyAlerts />} />
             <Route path="/exports" element={<Exports />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/pricing" element={<Pricing />} />
           </Routes>
         </div>
       </SentinelProvider>

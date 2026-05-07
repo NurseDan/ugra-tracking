@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { GAUGES } from '../config/gauges'
 import {
   getCurrentUser, listSubscriptions, createSubscription,
-  deleteSubscription, testSubscription
+  deleteSubscription, testSubscription, createPortalSession
 } from '../lib/api'
 import { subscribeBrowserToPush } from '../lib/pushSubscribe'
 
@@ -12,11 +13,14 @@ const NWS_EVENTS = ['Flash Flood Warning', 'Flood Warning', 'Flash Flood Watch',
                     'Flood Watch', 'Flood Advisory', 'Severe Thunderstorm Warning']
 
 export default function MyAlerts() {
+  const [searchParams] = useSearchParams()
+  const billingSuccess = searchParams.get('billing') === 'success'
   const [user, setUser] = useState(undefined)
   const [subs, setSubs] = useState([])
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState(null)
+  const [upgradePrompt, setUpgradePrompt] = useState(false)
 
   // form state
   const [gaugeId, setGaugeId] = useState('')
@@ -50,7 +54,7 @@ export default function MyAlerts() {
 
   async function onSubmit(e) {
     e.preventDefault()
-    setSubmitting(true); setErr(null)
+    setSubmitting(true); setErr(null); setUpgradePrompt(false)
     try {
       const selectedChannels = Object.entries(channels).filter(([, v]) => v).map(([k]) => k)
       if (!selectedChannels.length) throw new Error('Pick at least one delivery channel')
@@ -71,7 +75,9 @@ export default function MyAlerts() {
       await createSubscription(body)
       setUgcInput(''); setEventFilter({})
       await refresh()
-    } catch (e) { setErr(e.message) }
+    } catch (e) {
+      if (e.upgrade) { setUpgradePrompt(true) } else { setErr(e.message) }
+    }
     finally { setSubmitting(false) }
   }
 
@@ -90,30 +96,64 @@ export default function MyAlerts() {
     return (
       <div style={{ padding: 24, maxWidth: 640 }}>
         <h2>My Alerts</h2>
-        <p>Sign in with your Replit account to manage personal alert subscriptions. The dashboard,
-           history, and exports stay public — only personalized alerts require an account.</p>
-        <a href="/api/login" style={{
-          display: 'inline-block', padding: '10px 16px', background: '#3b82f6',
-          color: '#fff', textDecoration: 'none', borderRadius: 6
-        }}>Sign in with Replit</a>
+        <p style={{ color: '#aaa' }}>Sign in to manage personal alert subscriptions.
+          The dashboard, history, and exports stay public — only personalized alerts require an account.</p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+          <Link to="/login" style={{
+            display: 'inline-block', padding: '10px 16px', background: '#3b82f6',
+            color: '#fff', textDecoration: 'none', borderRadius: 6, fontWeight: 600
+          }}>Sign in</Link>
+          <Link to="/register" style={{
+            display: 'inline-block', padding: '10px 16px', background: '#1a1a1a',
+            color: '#93c5fd', textDecoration: 'none', borderRadius: 6,
+            border: '1px solid #334155', fontWeight: 600
+          }}>Create free account</Link>
+        </div>
       </div>
     )
   }
 
   return (
     <div style={{ padding: 24, maxWidth: 880 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
         <h2 style={{ margin: 0 }}>My Alerts</h2>
-        <div style={{ fontSize: 14, color: '#888' }}>
-          {user.email || user.id} · <a href="/api/logout">Sign out</a>
+        <div style={{ fontSize: 14, color: '#888', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <span style={{
+            padding: '2px 7px', borderRadius: 4, fontSize: 11, fontWeight: 700,
+            background: user.plan === 'pro' ? '#1d4ed8' : '#374151', color: '#fff'
+          }}>{(user.plan || 'free').toUpperCase()}</span>
+          {user.email || user.id}
+          {' · '}
+          <Link to="/pricing" style={{ color: '#3b82f6' }}>
+            {user.plan === 'pro' ? 'Manage billing' : 'Upgrade'}
+          </Link>
+          {' · '}
+          <a href="/api/logout" style={{ color: '#888' }}>Sign out</a>
         </div>
       </div>
+
+      {billingSuccess && (
+        <div style={{ background: '#052e16', color: '#10b981', padding: '10px 14px', borderRadius: 6, fontSize: 14 }}>
+          You&apos;re now on Pro! Unlimited alert subscriptions are now active.
+        </div>
+      )}
       <p style={{ color: '#aaa', fontSize: 14 }}>
         Alerts are delivered server-side 24/7 — they fire even when you have no browser open.
         Subscribe by gauge, by NWS county/zone code (e.g. <code>TXC265</code>), or both.
       </p>
 
       {err && <div style={{ background: '#7f1d1d', color: '#fff', padding: 8, borderRadius: 4, margin: '8px 0' }}>{err}</div>}
+
+      {upgradePrompt && (
+        <div style={{ background: '#1e1a00', border: '1px solid #854d0e', borderRadius: 6, padding: '12px 16px', margin: '8px 0' }}>
+          <strong style={{ color: '#fbbf24' }}>Free plan limit reached.</strong>
+          <span style={{ color: '#d4a', marginLeft: 6 }}>
+            Free accounts include 1 alert subscription.
+          </span>
+          {' '}
+          <Link to="/pricing" style={{ color: '#3b82f6', fontWeight: 600 }}>Upgrade to Pro →</Link>
+        </div>
+      )}
 
       <h3>Add subscription</h3>
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, background: '#1a1a1a', padding: 16, borderRadius: 8 }}>

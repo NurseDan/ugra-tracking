@@ -1,20 +1,17 @@
 import { Router } from 'express'
 import { query } from './db.js'
 import { GAUGES } from '../src/config/gauges.js'
-import { isAuthenticated } from './auth.js'
+import { isAuthenticated, userId } from './auth.js'
 import { getPublicKey } from './push.js'
 import { validateWebhookUrl } from './webhooks.js'
 import { dispatchToSubscription } from './alertEngine.js'
+import { FREE_SUBSCRIPTION_LIMIT } from './billing.js'
 
 const router = Router()
 
 const ALLOWED_LEVELS = new Set(['GREEN', 'YELLOW', 'ORANGE', 'RED', 'BLACK'])
 const ALLOWED_CHANNELS = new Set(['push', 'email', 'sms', 'webhook'])
 const VALID_GAUGE_IDS = new Set(GAUGES.map(g => g.id))
-
-function userId(req) {
-  return req.user?.claims?.sub
-}
 
 // --- Read APIs ---------------------------------------------------------
 
@@ -262,6 +259,23 @@ router.get('/me/subscriptions', isAuthenticated, async (req, res) => {
 const UGC_RE = /^[A-Z]{2}[CZ]\d{3}$/  // e.g. TXC265 (county) or TXZ187 (zone)
 
 router.post('/me/subscriptions', isAuthenticated, async (req, res) => {
+  const uid = userId(req)
+  // Enforce free-tier subscription cap.
+  const userRow = await query('SELECT plan FROM users WHERE id = $1', [uid])
+  const plan = userRow.rows[0]?.plan || 'free'
+  if (plan !== 'pro') {
+    const count = await query(
+      'SELECT COUNT(*) FROM alert_subscriptions WHERE user_id = $1',
+      [uid]
+    )
+    if (parseInt(count.rows[0].count, 10) >= FREE_SUBSCRIPTION_LIMIT) {
+      return res.status(403).json({
+        error: `Free plan is limited to ${FREE_SUBSCRIPTION_LIMIT} alert subscription. Upgrade to Pro for unlimited alerts.`,
+        upgrade: true
+      })
+    }
+  }
+
   const b = req.body || {}
   const gaugeId = b.gauge_id || null
   if (gaugeId && !VALID_GAUGE_IDS.has(gaugeId)) return res.status(400).json({ error: 'Invalid gauge_id' })
