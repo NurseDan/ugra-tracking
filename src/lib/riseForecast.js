@@ -1,7 +1,7 @@
-import { getDefaultProvider } from './aiBriefing'
-import { saveForecastCache, loadForecastCache, getHistory } from './gaugeHistory'
-import { fetchQPF72h } from './weatherApi'
-import { GAUGES } from '../config/gauges'
+import { getDefaultProvider } from './aiBriefing.js'
+import { saveForecastCache, loadForecastCache, getHistory } from './gaugeHistory.js'
+import { fetchQPF72h } from './weatherApi.js'
+import { GAUGES } from '../config/gauges.js'
 
 const RAINFALL_RISE_FACTOR = 0.6
 const PAST_RAINFALL_RISE_FACTOR = 0.3

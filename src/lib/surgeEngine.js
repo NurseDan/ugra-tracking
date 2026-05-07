@@ -1,5 +1,5 @@
-import { GAUGES } from '../config/gauges'
-import { ALERT_LEVELS } from './alertEngine'
+import { GAUGES } from '../config/gauges.js'
+import { ALERT_LEVELS } from './alertEngine.js'
 
 export function detectSurges(gaugeData) {
   const sorted = [...GAUGES].sort((a, b) => a.order - b.order)

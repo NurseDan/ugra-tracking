@@ -1,4 +1,4 @@
-import { ALERT_LEVELS } from './alertEngine'
+import { ALERT_LEVELS } from './alertEngine.js'
 
 const DEFAULT_MODEL = 'gpt-4o-mini'
 const OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions'
