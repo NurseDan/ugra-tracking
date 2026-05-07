@@ -11,6 +11,9 @@ CREATE TABLE IF NOT EXISTS users (
   provider_id   text,
   plan          text not null default 'free',
   plan_expires_at timestamptz,
+  default_email     text,
+  default_min_level text not null default 'ORANGE',
+  default_channels  jsonb not null default '["push"]'::jsonb,
   created_at    timestamptz default now(),
   updated_at    timestamptz default now()
 );
@@ -19,6 +22,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS provider      text not null default '
 ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id   text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS plan          text not null default 'free';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at timestamptz;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS default_email     text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS default_min_level text not null default 'ORANGE';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS default_channels  jsonb not null default '["push"]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS sessions (
   sid     varchar primary key,

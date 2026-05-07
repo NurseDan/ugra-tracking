@@ -148,7 +148,9 @@ export async function setupAuth(app) {
     if (!sub) return res.status(401).json({ message: 'Unauthorized' })
     const id = `google:${sub}`
     const r = await query(
-      'SELECT id, email, first_name, last_name, profile_image_url, plan FROM users WHERE id = $1',
+      `SELECT id, email, first_name, last_name, profile_image_url, plan,
+              default_email, default_min_level, default_channels
+         FROM users WHERE id = $1`,
       [id]
     )
     res.json(r.rows[0] || null)

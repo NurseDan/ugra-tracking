@@ -342,6 +342,85 @@ router.delete('/me/subscriptions/:id', isAuthenticated, async (req, res) => {
   res.json({ deleted: r.rowCount })
 })
 
+// --- Account settings -------------------------------------------------
+
+router.get('/me/usage', isAuthenticated, async (req, res) => {
+  const uid = userId(req)
+  const { rows: [userRow] } = await query('SELECT plan FROM users WHERE id = $1', [uid])
+  const limits = limitsFor(userRow?.plan)
+  const { rows: [{ count }] } = await query(
+    'SELECT COUNT(*) FROM alert_subscriptions WHERE user_id = $1', [uid])
+  const { rows: aiRows } = await query(
+    'SELECT request_count FROM ai_usage WHERE user_id = $1 AND date = CURRENT_DATE', [uid])
+  const subLimit = limits.maxSubscriptions === Infinity ? null : limits.maxSubscriptions
+  const aiLimit  = limits.aiCallsPerDay === Infinity ? null : limits.aiCallsPerDay
+  res.json({
+    plan: userRow?.plan ?? 'free',
+    subscriptions: { used: Number(count), limit: subLimit },
+    aiCalls:       { used: aiRows[0]?.request_count ?? 0, limit: aiLimit }
+  })
+})
+
+router.patch('/me/profile', isAuthenticated, async (req, res) => {
+  const { first_name, last_name } = req.body || {}
+  if (first_name != null && typeof first_name !== 'string') return res.status(400).json({ error: 'first_name must be a string' })
+  if (last_name != null && typeof last_name !== 'string') return res.status(400).json({ error: 'last_name must be a string' })
+  const fn = first_name?.trim().slice(0, 80) || null
+  const ln = last_name?.trim().slice(0, 80) || null
+  await query(
+    `UPDATE users SET first_name = COALESCE($2, first_name),
+                      last_name  = COALESCE($3, last_name),
+                      updated_at = now()
+       WHERE id = $1`,
+    [userId(req), fn, ln]
+  )
+  res.json({ ok: true })
+})
+
+router.patch('/me/preferences', isAuthenticated, async (req, res) => {
+  const { default_email, default_min_level, default_channels } = req.body || {}
+  if (default_email != null && (typeof default_email !== 'string' || default_email.length > 254))
+    return res.status(400).json({ error: 'default_email invalid' })
+  if (default_min_level != null && !ALLOWED_LEVELS.has(default_min_level))
+    return res.status(400).json({ error: 'default_min_level invalid' })
+  let channels = null
+  if (default_channels != null) {
+    if (!Array.isArray(default_channels)) return res.status(400).json({ error: 'default_channels must be an array' })
+    channels = default_channels.filter(c => ALLOWED_CHANNELS.has(c))
+  }
+  await query(
+    `UPDATE users SET
+       default_email     = COALESCE($2, default_email),
+       default_min_level = COALESCE($3, default_min_level),
+       default_channels  = COALESCE($4::jsonb, default_channels),
+       updated_at        = now()
+     WHERE id = $1`,
+    [userId(req), default_email?.trim() || null, default_min_level || null,
+     channels ? JSON.stringify(channels) : null]
+  )
+  res.json({ ok: true })
+})
+
+router.post('/me/sign-out-everywhere', isAuthenticated, async (req, res) => {
+  const uid = userId(req)
+  await query(
+    `DELETE FROM sessions WHERE sess->'passport'->'user'->>'id' = $1`,
+    [uid]
+  )
+  req.logout(() => res.json({ ok: true }))
+})
+
+router.delete('/me', isAuthenticated, async (req, res) => {
+  const uid = userId(req)
+  // Cascades to alert_subscriptions, ai_usage, notifications_sent.
+  await query('DELETE FROM users WHERE id = $1', [uid])
+  await query(
+    `DELETE FROM sessions WHERE sess->'passport'->'user'->>'id' = $1`,
+    [uid]
+  )
+  req.logout(() => res.json({ ok: true }))
+})
+
 router.post('/me/test-alert', isAuthenticated, async (req, res) => {
   const subId = req.body?.subscription_id
   if (!subId) return res.status(400).json({ error: 'subscription_id required' })
