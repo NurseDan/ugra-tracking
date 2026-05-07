@@ -147,3 +147,26 @@ CREATE TABLE IF NOT EXISTS vapid_keys (
   private_key text not null,
   subject     text not null
 );
+
+-- Encrypted runtime configuration (set via admin panel; env vars are the fallback).
+CREATE TABLE IF NOT EXISTS app_config (
+  key         text primary key,
+  value       text not null,
+  encrypted   boolean not null default true,
+  updated_at  timestamptz default now()
+);
+
+-- Admin flag and INITIAL_ADMIN_EMAIL bootstrap support.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin boolean not null default false;
+
+-- Custom alert thresholds per subscription (Pro feature).
+ALTER TABLE alert_subscriptions ADD COLUMN IF NOT EXISTS custom_height_ft double precision;
+ALTER TABLE alert_subscriptions ADD COLUMN IF NOT EXISTS custom_flow_cfs  double precision;
+
+-- Slack / Discord webhook delivery channels.
+ALTER TABLE alert_subscriptions ADD COLUMN IF NOT EXISTS slack_webhook_url   text;
+ALTER TABLE alert_subscriptions ADD COLUMN IF NOT EXISTS discord_webhook_url text;
+
+-- Per-user LLM call budget (monthly rolling window).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_calls_this_month int NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ai_calls_reset_at   timestamptz NOT NULL DEFAULT now();

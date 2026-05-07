@@ -5,6 +5,8 @@ import { query } from './db.js'
 import { dispatchPush } from './push.js'
 import { sendAlertEmail } from './mail.js'
 import { dispatchWebhook } from './webhooks.js'
+import { sendAlertSms } from './sms.js'
+import { sendSlackAlert, sendDiscordAlert } from './slackDiscord.js'
 
 export const ALERT_LEVELS = {
   GREEN: { label: 'Normal', priority: 0 },
@@ -75,10 +77,12 @@ async function dispatchOne(sub, incident, channel) {
   let lastErr = null
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
-      if (channel === 'push') await dispatchPush(sub, incident)
-      else if (channel === 'email') await sendAlertEmail(sub, incident)
+      if (channel === 'push')    await dispatchPush(sub, incident)
+      else if (channel === 'email')   await sendAlertEmail(sub, incident)
       else if (channel === 'webhook') await dispatchWebhook(sub, incident)
-      else if (channel === 'sms') throw new Error('SMS channel requires Twilio connection — not yet configured')
+      else if (channel === 'sms')     await sendAlertSms(sub, incident)
+      else if (channel === 'slack')   await sendSlackAlert(sub, incident)
+      else if (channel === 'discord') await sendDiscordAlert(sub, incident)
       else throw new Error(`Unknown channel: ${channel}`)
       await query(
         `INSERT INTO notifications_sent (subscription_id, incident_id, channel, status)

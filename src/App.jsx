@@ -19,6 +19,8 @@ import Exports from './pages/Exports'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import Pricing from './pages/Pricing'
+import Admin from './pages/Admin'
+import Landing from './pages/Landing'
 import AppHeader from './components/AppHeader'
 import { SentinelProvider } from './contexts/SentinelContext'
 
@@ -250,7 +252,8 @@ export default function App() {
           )}
 
           <Routes>
-            <Route path="/" element={<Dashboard forecasts={cachedForecasts} />} />
+            <Route path="/" element={<Landing />} />
+            <Route path="/dashboard" element={<Dashboard forecasts={cachedForecasts} />} />
             <Route path="/gauge/:id" element={<GaugeDetail />} />
             <Route path="/incidents" element={<Incidents />} />
             <Route path="/my-alerts" element={<MyAlerts />} />
@@ -258,6 +261,7 @@ export default function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             <Route path="/pricing" element={<Pricing />} />
+            <Route path="/admin" element={<Admin />} />
           </Routes>
         </div>
       </SentinelProvider>

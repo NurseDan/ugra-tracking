@@ -8,7 +8,7 @@ import {
 import { subscribeBrowserToPush } from '../lib/pushSubscribe'
 
 const LEVELS = ['YELLOW', 'ORANGE', 'RED', 'BLACK']
-const CHANNELS = ['push', 'email', 'webhook', 'sms']
+const CHANNELS = ['push', 'email', 'sms', 'webhook', 'slack', 'discord']
 const NWS_EVENTS = ['Flash Flood Warning', 'Flood Warning', 'Flash Flood Watch',
                     'Flood Watch', 'Flood Advisory', 'Severe Thunderstorm Warning']
 
@@ -27,11 +27,15 @@ export default function MyAlerts() {
   const [ugcInput, setUgcInput] = useState('')
   const [eventFilter, setEventFilter] = useState({})
   const [minLevel, setMinLevel] = useState('ORANGE')
-  const [channels, setChannels] = useState({ push: true, email: false, webhook: false, sms: false })
+  const [channels, setChannels] = useState({ push: true, email: false, sms: false, webhook: false, slack: false, discord: false })
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [webhookUrl, setWebhookUrl] = useState('')
   const [webhookSecret, setWebhookSecret] = useState('')
+  const [slackUrl, setSlackUrl] = useState('')
+  const [discordUrl, setDiscordUrl] = useState('')
+  const [customHeightFt, setCustomHeightFt] = useState('')
+  const [customFlowCfs, setCustomFlowCfs] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   async function refresh() {
@@ -69,7 +73,11 @@ export default function MyAlerts() {
         email: channels.email ? email : null,
         phone: channels.sms ? phone : null,
         webhook_url: channels.webhook ? webhookUrl : null,
-        webhook_secret: channels.webhook ? webhookSecret : null
+        webhook_secret: channels.webhook ? webhookSecret : null,
+        slack_webhook_url: channels.slack ? slackUrl : null,
+        discord_webhook_url: channels.discord ? discordUrl : null,
+        custom_height_ft: customHeightFt ? parseFloat(customHeightFt) : null,
+        custom_flow_cfs: customFlowCfs ? parseFloat(customFlowCfs) : null
       }
       if (channels.push) body.push = await subscribeBrowserToPush()
       await createSubscription(body)
@@ -201,8 +209,7 @@ export default function MyAlerts() {
               <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} style={{ marginLeft: 8, width: 200 }} />
             </label>
             <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 4 }}>
-              SMS requires a Twilio connection on the server. Subscriptions are stored, but delivery will be marked
-              "failed" until Twilio is connected.
+              SMS requires Twilio credentials set in the admin panel. Subscription is saved now; delivery activates once configured.
             </div>
           </div>
         )}
@@ -215,6 +222,38 @@ export default function MyAlerts() {
               <input type="text" value={webhookSecret} onChange={e => setWebhookSecret(e.target.value)} style={{ marginLeft: 8, width: 280 }} />
             </label>
           </>
+        )}
+        {channels.slack && (
+          <label>Slack incoming webhook URL:
+            <input type="url" value={slackUrl} onChange={e => setSlackUrl(e.target.value)} required
+              placeholder="https://hooks.slack.com/services/…" style={{ marginLeft: 8, width: 380 }} />
+          </label>
+        )}
+        {channels.discord && (
+          <label>Discord webhook URL:
+            <input type="url" value={discordUrl} onChange={e => setDiscordUrl(e.target.value)} required
+              placeholder="https://discord.com/api/webhooks/…" style={{ marginLeft: 8, width: 380 }} />
+          </label>
+        )}
+        {gaugeId && user?.plan === 'pro' && (
+          <fieldset style={{ border: '1px solid #334155', padding: 10, borderRadius: 4 }}>
+            <legend style={{ fontSize: 12, color: '#3b82f6' }}>Custom trigger thresholds (Pro — optional)</legend>
+            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <label style={{ fontSize: 13 }}>Alert above stage (ft):
+                <input type="number" min="0" step="0.1" value={customHeightFt}
+                  onChange={e => setCustomHeightFt(e.target.value)}
+                  style={{ marginLeft: 8, width: 80 }} />
+              </label>
+              <label style={{ fontSize: 13 }}>Alert above flow (cfs):
+                <input type="number" min="0" step="10" value={customFlowCfs}
+                  onChange={e => setCustomFlowCfs(e.target.value)}
+                  style={{ marginLeft: 8, width: 100 }} />
+              </label>
+            </div>
+            <div style={{ fontSize: 11, color: '#555', marginTop: 6 }}>
+              Fires when the gauge crosses these values, in addition to the level-based alerts above.
+            </div>
+          </fieldset>
         )}
         <button type="submit" disabled={submitting} style={{
           padding: '8px 16px', background: '#3b82f6', color: '#fff',
@@ -237,7 +276,11 @@ export default function MyAlerts() {
               <div style={{ fontSize: 13, color: '#aaa' }}>
                 {(s.channels || []).join(', ')}
                 {s.email && ` · ${s.email}`}
-                {s.webhook_url && ` · ${s.webhook_url}`}
+                {s.webhook_url && ` · webhook`}
+                {s.slack_webhook_url && ` · Slack`}
+                {s.discord_webhook_url && ` · Discord`}
+                {s.custom_height_ft != null && ` · >${s.custom_height_ft} ft`}
+                {s.custom_flow_cfs  != null && ` · >${s.custom_flow_cfs} cfs`}
                 {Array.isArray(s.nws_event_filter) && s.nws_event_filter.length > 0 &&
                   ` · events: ${s.nws_event_filter.join(', ')}`}
               </div>

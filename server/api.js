@@ -10,7 +10,7 @@ import { FREE_SUBSCRIPTION_LIMIT } from './billing.js'
 const router = Router()
 
 const ALLOWED_LEVELS = new Set(['GREEN', 'YELLOW', 'ORANGE', 'RED', 'BLACK'])
-const ALLOWED_CHANNELS = new Set(['push', 'email', 'sms', 'webhook'])
+const ALLOWED_CHANNELS = new Set(['push', 'email', 'sms', 'webhook', 'slack', 'discord'])
 const VALID_GAUGE_IDS = new Set(GAUGES.map(g => g.id))
 
 // --- Read APIs ---------------------------------------------------------
@@ -249,7 +249,10 @@ router.get('/push/vapid-public-key', async (_req, res) => {
 router.get('/me/subscriptions', isAuthenticated, async (req, res) => {
   const r = await query(
     `SELECT id, gauge_id, ugc_codes, nws_event_filter, min_level, channels, email, phone,
-            webhook_url, push_endpoint IS NOT NULL AS has_push, enabled, created_at
+            webhook_url, slack_webhook_url, discord_webhook_url,
+            push_endpoint IS NOT NULL AS has_push,
+            custom_height_ft, custom_flow_cfs,
+            enabled, created_at
        FROM alert_subscriptions WHERE user_id = $1 ORDER BY created_at DESC`,
     [userId(req)]
   )
@@ -298,18 +301,47 @@ router.post('/me/subscriptions', isAuthenticated, async (req, res) => {
     ? b.nws_event_filter.map(s => String(s).slice(0, 80))
     : []
 
+  // Validate Slack/Discord webhook URLs if provided
+  const slackUrl = channels.includes('slack') ? (b.slack_webhook_url || null) : null
+  const discordUrl = channels.includes('discord') ? (b.discord_webhook_url || null) : null
+  if (channels.includes('slack') && !slackUrl) {
+    return res.status(400).json({ error: 'slack_webhook_url required for slack channel' })
+  }
+  if (channels.includes('discord') && !discordUrl) {
+    return res.status(400).json({ error: 'discord_webhook_url required for discord channel' })
+  }
+
+  // Custom thresholds (Pro only)
+  let customHeightFt = null
+  let customFlowCfs = null
+  if (plan === 'pro') {
+    if (b.custom_height_ft != null) {
+      const v = parseFloat(b.custom_height_ft)
+      if (!isNaN(v) && v > 0) customHeightFt = v
+    }
+    if (b.custom_flow_cfs != null) {
+      const v = parseFloat(b.custom_flow_cfs)
+      if (!isNaN(v) && v > 0) customFlowCfs = v
+    }
+  }
+
   const r = await query(
     `INSERT INTO alert_subscriptions
        (user_id, gauge_id, ugc_codes, nws_event_filter, min_level, channels,
         email, phone, webhook_url, webhook_secret,
-        push_endpoint, push_p256dh, push_auth, enabled)
-     VALUES ($1,$2,$3::jsonb,$4::jsonb,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,true)
+        slack_webhook_url, discord_webhook_url,
+        push_endpoint, push_p256dh, push_auth,
+        custom_height_ft, custom_flow_cfs,
+        enabled)
+     VALUES ($1,$2,$3::jsonb,$4::jsonb,$5,$6::jsonb,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,true)
      RETURNING id`,
     [
-      userId(req), gaugeId, JSON.stringify(ugcCodes), JSON.stringify(eventFilter),
+      uid, gaugeId, JSON.stringify(ugcCodes), JSON.stringify(eventFilter),
       minLevel, JSON.stringify(channels),
       b.email || null, b.phone || null, b.webhook_url || null, b.webhook_secret || null,
-      b.push?.endpoint || null, b.push?.keys?.p256dh || null, b.push?.keys?.auth || null
+      slackUrl, discordUrl,
+      b.push?.endpoint || null, b.push?.keys?.p256dh || null, b.push?.keys?.auth || null,
+      customHeightFt, customFlowCfs
     ]
   )
   res.json({ id: r.rows[0].id })

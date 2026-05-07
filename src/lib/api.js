@@ -59,10 +59,48 @@ export function exportUrl(kind, fmt, params = {}) {
   return `/api/export/${kind}.${fmt}${qs ? `?${qs}` : ''}`
 }
 
-export async function createCheckoutSession() {
-  return jsonFetch('/api/billing/create-checkout-session', { method: 'POST' })
+export async function createCheckoutSession(annual = false) {
+  return jsonFetch('/api/billing/create-checkout-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ annual })
+  })
 }
 
 export async function createPortalSession() {
   return jsonFetch('/api/billing/portal', { method: 'POST' })
+}
+
+// ── Admin API ─────────────────────────────────────────────────────────────────
+
+export async function adminGetConfig() {
+  return jsonFetch('/api/admin/config')
+}
+
+export async function adminSetConfig(key, value) {
+  return jsonFetch(`/api/admin/config/${key}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value })
+  })
+}
+
+export async function adminDeleteConfig(key) {
+  return jsonFetch(`/api/admin/config/${key}`, { method: 'DELETE' })
+}
+
+export async function adminGetUsers() {
+  return jsonFetch('/api/admin/users')
+}
+
+export async function adminPatchUser(id, changes) {
+  return jsonFetch(`/api/admin/users/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(changes)
+  })
+}
+
+export async function adminGetStats() {
+  return jsonFetch('/api/admin/stats')
 }

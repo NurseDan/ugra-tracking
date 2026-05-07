@@ -1,14 +1,20 @@
 import React, { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { Activity, AlertTriangle, Bell, Clock, Download, History, X } from 'lucide-react'
+import { Activity, AlertTriangle, Bell, Clock, Download, History, Settings, X } from 'lucide-react'
 import { ALERT_LEVELS } from '../lib/alertEngine'
 import { formatCDT } from '../lib/formatTime'
 import { GAUGES } from '../config/gauges'
+import { getCurrentUser } from '../lib/api'
 import NotificationSettings from './NotificationSettings'
 import './AppHeader.css'
 
 export default function AppHeader({ highestAlert, lastUpdate }) {
   const [notifOpen, setNotifOpen] = useState(false)
+  const [user, setUser] = useState(null)
+
+  useEffect(() => {
+    getCurrentUser().then(u => setUser(u)).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!notifOpen) return
@@ -27,7 +33,7 @@ export default function AppHeader({ highestAlert, lastUpdate }) {
           </Link>
 
           <nav className="app-header__nav">
-            <NavLink end to="/" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
+            <NavLink to="/dashboard" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
               Dashboard
             </NavLink>
             <NavLink to="/incidents" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
@@ -39,13 +45,21 @@ export default function AppHeader({ highestAlert, lastUpdate }) {
             <NavLink to="/exports" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
               <Download size={14} /> Exports
             </NavLink>
+            <NavLink to="/pricing" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
+              Pricing
+            </NavLink>
+            {user?.is_admin && (
+              <NavLink to="/admin" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
+                <Settings size={14} /> Admin
+              </NavLink>
+            )}
             <button
               type="button"
               className="app-header__notif-btn"
               onClick={() => setNotifOpen(true)}
               aria-label="Open notification settings"
             >
-              <Bell size={14} /> Notifications
+              <Bell size={14} /> Alerts
             </button>
           </nav>
 
