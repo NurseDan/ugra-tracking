@@ -1,30 +1,25 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { getCurrentUser } from '../lib/api'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [session, setSession] = useState(undefined) // undefined = loading
+  // undefined = loading, null = signed out, object = signed in
+  const [session, setSession] = useState(undefined)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session ?? null)
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session ?? null)
-    })
-
-    return () => subscription.unsubscribe()
+    getCurrentUser()
+      .then(user => setSession(user ?? null))
+      .catch(() => setSession(null))
   }, [])
 
-  const signInWithGoogle = () =>
-    supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin }
-    })
+  const signInWithGoogle = () => {
+    window.location.href = '/api/login'
+  }
 
-  const signOut = () => supabase.auth.signOut()
+  const signOut = () => {
+    window.location.href = '/api/logout'
+  }
 
   return (
     <AuthContext.Provider value={{ session, signInWithGoogle, signOut }}>
