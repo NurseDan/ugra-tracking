@@ -10,7 +10,7 @@ import { formatCDT } from './lib/formatTime'
 import { mergeHistory, loadForecastCache, isForecastStale } from './lib/gaugeHistory'
 import { generateAllForecasts } from './lib/riseForecast'
 import { WifiOff } from 'lucide-react'
-
+import { AuthProvider, useAuth } from './context/AuthContext'
 import Dashboard from './pages/Dashboard'
 import GaugeDetail from './pages/GaugeDetail'
 import Incidents from './pages/Incidents'
@@ -21,10 +21,9 @@ import Exports from './pages/Exports'
 import AccountSettings from './pages/AccountSettings'
 import AppHeader from './components/AppHeader'
 import { SentinelProvider } from './contexts/SentinelContext'
+import Landing from './pages/Landing'
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value))
-}
+function clamp(value, min, max) { return Math.max(min, Math.min(max, value)) }
 
 function getSentinelScore(d) {
   if (!d) return 0
@@ -35,7 +34,6 @@ function getSentinelScore(d) {
   const rainfall = d.forecast?.totalInches || 0
   const rainfallIntensity = d.forecast?.maxHourlyInches || 0
   const probability = d.forecast?.maxProbability || 0
-
   return Math.round(clamp(
     rise5m * 30 + rise15m * 18 + rise60m * 10 + flow / 160 +
     rainfall * 22 + rainfallIntensity * 45 + probability / 5,
@@ -82,31 +80,49 @@ function getOnlineState() {
 }
 
 const forecastGenerating = new Set()
-
 async function backgroundGenerateForecasts(setCachedForecasts) {
   const staleSiteIds = GAUGES.map(g => g.id).filter(id => isForecastStale(id) && !forecastGenerating.has(id))
   if (staleSiteIds.length === 0) return
-
   for (const siteId of staleSiteIds) {
     forecastGenerating.add(siteId)
-    try {
-      await generateAllForecasts([siteId])
-    } catch {}
-    finally {
-      forecastGenerating.delete(siteId)
-    }
+    try { await generateAllForecasts([siteId]) } catch {}
+    finally { forecastGenerating.delete(siteId) }
   }
   setCachedForecasts(loadAllCachedForecasts())
 }
 
 export default function App() {
+  return (
+    <AuthProvider>
+      <AppRoutes />
+    </AuthProvider>
+  )
+}
+
+function AppRoutes() {
+  const { session } = useAuth()
+
+  if (session === undefined) {
+    return (
+      <div className="loading-screen" style={{ minHeight: '100vh' }}>
+        <div className="loading-spinner" />
+      </div>
+    )
+  }
+
+  if (!session) {
+    return <Landing />
+  }
+
+  return <AuthenticatedApp />
+}
+
+function AuthenticatedApp() {
   const [data, setData] = useState({})
   const [surgeEvents, setSurgeEvents] = useState([])
   const [lastUpdate, setLastUpdate] = useState(null)
   const [fetchError, setFetchError] = useState(false)
   const [isOffline, setIsOffline] = useState(() => !getOnlineState())
-
-    // Issue #3: RED/BLACK browser push notifications
   useNotifications(data)
   const [cachedForecasts, setCachedForecasts] = useState(() =>
     loadAllCachedForecasts({ allowStale: !getOnlineState() })
@@ -121,10 +137,7 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const handleOnline = () => {
-      setIsOffline(false)
-      fetchData()
-    }
+    const handleOnline = () => { setIsOffline(false); fetchData() }
     const handleOffline = () => {
       setIsOffline(true)
       setCachedForecasts(loadAllCachedForecasts({ allowStale: true }))
@@ -151,68 +164,51 @@ export default function App() {
   async function fetchData() {
     try {
       const ids = GAUGES.map(g => g.id)
-      // USGS is the primary data source. Weather forecasts (Open-Meteo /
-      // weather.gov) are best-effort: per-call .catch + allSettled ensures a
-      // single 429 from weather.gov doesn't strand the dashboard. USGS
-      // failures (offline, network down) fall back to cached data via the
-      // offline banner path rather than throwing.
       const [usgsResult, ...weatherResults] = await Promise.allSettled([
         fetchUSGSGauges(ids),
         ...GAUGES.map(g =>
           fetchPrecipitationForecast(g.lat, g.lng).catch(() => null)
         )
       ])
-
       const usgsData = usgsResult.status === 'fulfilled' ? (usgsResult.value || {}) : {}
       const usgsHasData = Object.keys(usgsData).length > 0
-
       const forecastByGauge = {}
       GAUGES.forEach((g, i) => {
         const r = weatherResults[i]
         forecastByGauge[g.id] = r && r.status === 'fulfilled' ? r.value : null
       })
-
       const processed = {}
-
       for (const g of GAUGES) {
         const d = usgsData[g.id]
         if (!d) continue
-
         const stale = isStaleData(d.time)
         const rates = calculateRates(d.history || [], d)
         const alert = getAlertLevel(rates, { isStale: stale })
         const forecast = forecastByGauge[g.id]
         const base = { ...d, alert, rates, forecast, isStale: stale }
         const sentinelScore = getSentinelScore(base)
-
         processed[g.id] = {
           ...base,
           sentinelScore,
           sentinelLevel: getSentinelLevel(sentinelScore),
           etaHours: estimateArrivalHours(g, base)
         }
-
         const prevAlert = prevAlertsRef.current[g.id]
         const prevPriority = ALERT_LEVELS[prevAlert]?.priority ?? -1
         const newPriority = ALERT_LEVELS[alert]?.priority ?? 0
         if (prevAlert !== undefined && newPriority > prevPriority) {
           logIncident({
-            gaugeId: g.id,
-            gaugeName: g.name,
-            fromAlert: prevAlert,
-            toAlert: alert,
-            height: d.height,
-            flow: d.flow,
+            gaugeId: g.id, gaugeName: g.name,
+            fromAlert: prevAlert, toAlert: alert,
+            height: d.height, flow: d.flow,
             time: new Date().toISOString()
           })
         }
         prevAlertsRef.current[g.id] = alert
-
         if (d.history && d.history.length > 0) {
           mergeHistory(g.id, d.history).catch(() => {})
         }
       }
-
       const surges = detectSurges(processed)
       const networkOffline = !getOnlineState()
       const useStaleForecasts = networkOffline || !usgsHasData
@@ -237,32 +233,25 @@ export default function App() {
   const highestAlert = alertsArray.length > 0 ? getHighestAlert(alertsArray) : 'GREEN'
 
   return (
-    <BrowserRouter>
-      <SentinelProvider gaugesData={data} surgeEvents={surgeEvents}>
-        <div className="dashboard-container">
-          <AppHeader highestAlert={highestAlert} lastUpdate={lastUpdate} />
-
-          {(isOffline || fetchError) && (
-            <div className="error-banner">
-              <WifiOff size={16} />
-              {isOffline
-                ? 'Offline — showing last cached river data'
-                : 'Data refresh failed — displaying last known values'}
-              {lastUpdate && <span> from {formatCDT(lastUpdate)}</span>}
-            </div>
-          )}
-
-          <Routes>
-            <Route path="/" element={<Dashboard forecasts={cachedForecasts} />} />
-                    <Route path="/public" element={<PublicDashboard />} />
-            <Route path="/gauge/:id" element={<GaugeDetail />} />
-            <Route path="/incidents" element={<Incidents />} />
-            <Route path="/my-alerts" element={<MyAlerts />} />
-            <Route path="/exports" element={<Exports />} />
-            <Route path="/account" element={<AccountSettings />} />
-          </Routes>
-        </div>
-      </SentinelProvider>
-    </BrowserRouter>
+    <SentinelProvider data={data} surgeEvents={surgeEvents} cachedForecasts={cachedForecasts}>
+      <BrowserRouter>
+        <AppHeader highestAlert={highestAlert} lastUpdate={lastUpdate} />
+        {(isOffline || fetchError) && (
+          <div className="error-banner">
+            <WifiOff size={16} />
+            {isOffline ? 'Offline — showing last cached river data' : 'Data refresh failed — displaying last known values'}
+            {lastUpdate && <span style={{ marginLeft: 8, opacity: 0.7 }}>from {formatCDT(lastUpdate)}</span>}
+          </div>
+        )}
+        <Routes>
+          <Route path="/" element={<Dashboard data={data} lastUpdate={lastUpdate} />} />
+          <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
+          <Route path="/incidents" element={<Incidents />} />
+          <Route path="/my-alerts" element={<MyAlerts data={data} />} />
+          <Route path="/exports" element={<Exports data={data} />} />
+          <Route path="/account" element={<AccountSettings />} />
+        </Routes>
+      </BrowserRouter>
+    </SentinelProvider>
   )
 }
