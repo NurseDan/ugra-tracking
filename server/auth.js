@@ -148,12 +148,30 @@ export async function setupAuth(app) {
     if (!sub) return res.status(401).json({ message: 'Unauthorized' })
     const id = `google:${sub}`
     const r = await query(
-      `SELECT id, email, first_name, last_name, profile_image_url, plan,
+      `SELECT id, email, first_name, last_name, profile_image_url, plan, phone,
+              stripe_customer_id, stripe_subscription_id,
               default_email, default_min_level, default_channels
          FROM users WHERE id = $1`,
       [id]
     )
     res.json(r.rows[0] || null)
+  })
+
+  app.patch('/api/auth/user', isAuthenticated, async (req, res) => {
+    const sub = req.user?.claims?.sub
+    if (!sub) return res.status(401).json({ message: 'Unauthorized' })
+    const id = `google:${sub}`
+    const { first_name, last_name, phone } = req.body || {}
+    await query(
+      `UPDATE users SET
+         first_name = COALESCE($2, first_name),
+         last_name  = COALESCE($3, last_name),
+         phone      = COALESCE($4, phone),
+         updated_at = now()
+       WHERE id = $1`,
+      [id, first_name?.trim() || null, last_name?.trim() || null, phone?.trim() || null]
+    )
+    res.json({ ok: true })
   })
 
   console.log('[auth] Google OAuth ready')

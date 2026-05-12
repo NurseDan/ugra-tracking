@@ -185,42 +185,78 @@ export default function GaugeDetail() {
     else { flowMessage = 'Low Flow: Water moving very slowly.'; flowColor = '#60a5fa' }
   }
 
+  const rate5 = d.rates?.rise5m ?? 0
+  const rate15 = d.rates?.rise15m ?? 0
+  const rate60 = d.rates?.rise60m ?? 0
+  const rateColor = r => r > 0.15 ? 'var(--alert-orange)' : r < -0.08 ? 'var(--alert-green)' : '#94a3b8'
+
   return (
     <div className="gauge-detail-container">
-      <Link to="/" style={{ color: '#60a5fa', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 24 }}>
+      <Link to="/" className="back-link">
         <ArrowLeft size={16} /> Back to Dashboard
       </Link>
 
       <div className="glass-panel" style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 24 }}>
+        {d.isStale && (
+          <div className="stale-banner">Data may be stale — last reading was over 20 minutes ago.</div>
+        )}
+
+        <div className="detail-header-row">
           <div>
-            <h1 style={{ fontSize: '2rem', marginBottom: 8 }}>{gaugeConfig.name}</h1>
-            <div className={`alert-badge ${alertClass}`} style={{ marginBottom: 16 }}>
-              <AlertTriangle size={16} /> {alertLabel}
+            <h1 className="detail-title">{gaugeConfig.name}</h1>
+            <div className={`alert-badge ${alertClass}`} style={{ marginBottom: 10 }}>
+              <AlertTriangle size={14} /> {alertLabel}
             </div>
-            {d.isStale && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#94a3b8', fontSize: '0.8rem', marginBottom: 8 }}>
-                <Clock size={13} /> Data may be stale — last reading over 20 minutes ago
-              </div>
-            )}
-            <div style={{ color: '#94a3b8' }}>
-              Lat: {gaugeConfig.lat} | Lng: {gaugeConfig.lng}
+            <div style={{ color: '#64748b', fontSize: '0.78rem', marginBottom: 14 }}>
+              USGS #{gaugeConfig.id} &nbsp;·&nbsp; {gaugeConfig.lat}°N, {Math.abs(gaugeConfig.lng)}°W
             </div>
-            <div style={{ marginTop: 14 }}>
-              <NotificationToggle gaugeId={id} />
-            </div>
+            <NotificationToggle gaugeId={id} />
           </div>
 
-          <div style={{ display: 'flex', gap: 32 }}>
+          <div className="detail-metrics-row">
             <div className="metric">
               <div className="metric-label">Current Level</div>
               <div><span className="metric-value">{height.toFixed(2)}</span><span className="metric-unit"> ft</span></div>
             </div>
             <div className="metric">
               <div className="metric-label">Flow Rate</div>
-              <div><span className="metric-value">{d.flow !== undefined && d.flow !== null ? d.flow.toLocaleString() : '—'}</span><span className="metric-unit"> cfs</span></div>
+              <div>
+                <span className="metric-value">{d.flow !== undefined && d.flow !== null ? d.flow.toLocaleString() : '—'}</span>
+                <span className="metric-unit"> cfs</span>
+              </div>
             </div>
+            <div className="metric">
+              <div className="metric-label">1hr Change</div>
+              <div>
+                <span className="metric-value" style={{ color: rateColor(rate60) }}>
+                  {rate60 >= 0 ? '+' : ''}{rate60.toFixed(2)}
+                </span>
+                <span className="metric-unit"> ft/hr</span>
+              </div>
+            </div>
+            {gaugeConfig.floodStageFt && (
+              <div className="metric">
+                <div className="metric-label">To Flood</div>
+                <div>
+                  <span className="metric-value" style={{ color: (height / gaugeConfig.floodStageFt) > 0.85 ? 'var(--alert-red)' : (height / gaugeConfig.floodStageFt) > 0.65 ? 'var(--alert-orange)' : 'var(--text-main)' }}>
+                    {Math.max(0, gaugeConfig.floodStageFt - height).toFixed(2)}
+                  </span>
+                  <span className="metric-unit"> ft</span>
+                </div>
+              </div>
+            )}
           </div>
+        </div>
+
+        <div className="rate-bar">
+          {[['5 min', rate5], ['15 min', rate15], ['60 min', rate60]].map(([label, r]) => (
+            <div key={label} className="rate-chip">
+              <span className="rate-chip-label">{label}</span>
+              <span style={{ fontWeight: 700, color: rateColor(r) }}>
+                {r >= 0 ? '+' : ''}{r.toFixed(2)} ft
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -316,41 +352,69 @@ export default function GaugeDetail() {
           </div>
         </div>
 
-        <div className="glass-panel flood-stage-panel">
-          <h3 style={{ marginBottom: 24, textAlign: 'center' }}>Flood Stage Monitor</h3>
+        <div className="glass-panel flood-meter-panel">
+          <h3 style={{ textAlign: 'center', color: '#f8fafc', margin: '0 0 20px', fontSize: '1rem' }}>
+            Flood Stage Monitor
+          </h3>
 
-          <div style={{ position: 'relative', height: 300, width: 60, background: 'rgba(0,0,0,0.3)', borderRadius: 30, border: '1px solid rgba(255,255,255,0.1)', overflow: 'hidden', margin: '0 auto' }}>
-            <div style={{
-              position: 'absolute', bottom: 0, left: 0, width: '100%',
-              height: `${fillPercent}%`,
-              background: `var(--alert-${alertClass.toLowerCase()})`,
-              transition: 'height 1s ease-in-out, background 0.5s',
-              boxShadow: `0 0 20px var(--alert-${alertClass.toLowerCase()})`
-            }} />
+          <div className="thermometer-wrap">
+            <div className="thermometer">
+              <div
+                className="thermometer-fill"
+                style={{
+                  height: `${fillPercent}%`,
+                  background: `var(--alert-${alertClass.toLowerCase()})`,
+                  boxShadow: `0 0 28px var(--alert-${alertClass.toLowerCase()})`
+                }}
+              />
+              {gaugeConfig.floodStageFt && (
+                <div className="flood-marker" style={{ bottom: `${floodLinePercent}%` }}>
+                  <div className="flood-marker-label">FLOOD</div>
+                </div>
+              )}
+            </div>
+          </div>
 
-            {gaugeConfig.floodStageFt && (
-              <div style={{
-                position: 'absolute', bottom: `${floodLinePercent}%`,
-                left: -10, width: 80, borderBottom: '2px dashed #ef4444', zIndex: 10
-              }}>
-                <div style={{ position: 'absolute', right: -50, top: -8, color: '#ef4444', fontSize: '0.75rem', fontWeight: 'bold' }}>FLOOD</div>
-              </div>
+          <div style={{ textAlign: 'center', marginTop: 16 }}>
+            <div style={{ fontSize: '2.4rem', fontWeight: 800, color: `var(--alert-${alertClass.toLowerCase()})`, lineHeight: 1 }}>
+              {height.toFixed(1)}'
+            </div>
+            {gaugeConfig.floodStageFt ? (
+              <>
+                <div style={{ color: '#64748b', fontSize: '0.8rem', margin: '6px 0 10px' }}>
+                  Flood Stage: {gaugeConfig.floodStageFt}'
+                </div>
+                <div className="progress-bar-track" style={{ width: 150, margin: '0 auto 6px' }}>
+                  <div
+                    className="progress-bar-fill"
+                    style={{
+                      width: `${Math.min((height / gaugeConfig.floodStageFt) * 100, 100)}%`,
+                      background: (height / gaugeConfig.floodStageFt) > 0.9 ? 'var(--alert-red)' : (height / gaugeConfig.floodStageFt) > 0.65 ? 'var(--alert-orange)' : 'var(--alert-green)'
+                    }}
+                  />
+                </div>
+                <div style={{ fontSize: '0.78rem', color: (height / gaugeConfig.floodStageFt) > 0.8 ? '#fca5a5' : '#64748b', marginBottom: 10 }}>
+                  {((height / gaugeConfig.floodStageFt) * 100).toFixed(0)}% of flood stage
+                </div>
+                <div className="flood-countdown">
+                  {Math.max(0, gaugeConfig.floodStageFt - height).toFixed(2)} ft until flood
+                </div>
+              </>
+            ) : (
+              <div style={{ color: '#475569', fontSize: '0.8rem', marginTop: 8 }}>Flood stage not defined</div>
             )}
           </div>
 
-          {gaugeConfig.floodStageFt && (
-            <div style={{ marginTop: 12, padding: '8px 16px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: 8, color: '#fca5a5', fontSize: '0.875rem', fontWeight: 600, textAlign: 'center' }}>
-              {Math.max(0, gaugeConfig.floodStageFt - height).toFixed(2)} ft until Flood Stage
-            </div>
-          )}
-
-          <div style={{ marginTop: 24, textAlign: 'center' }}>
-            <div style={{ fontSize: '2rem', fontWeight: 700, color: `var(--alert-${alertClass.toLowerCase()})` }}>
-              {height.toFixed(1)}'
-            </div>
-            <div style={{ color: '#94a3b8', fontSize: '0.875rem' }}>
-              {gaugeConfig.floodStageFt ? `Flood Stage: ${gaugeConfig.floodStageFt}'` : 'Flood Stage Unknown'}
-            </div>
+          <div className="rate-summary">
+            <div className="rate-summary-title">Rise Rates</div>
+            {[['5 min', rate5], ['15 min', rate15], ['60 min', rate60]].map(([label, r]) => (
+              <div key={label} className="rate-summary-row">
+                <span style={{ color: '#64748b', fontSize: '0.78rem' }}>{label}</span>
+                <span style={{ fontWeight: 700, fontSize: '0.78rem', color: rateColor(r) }}>
+                  {r >= 0 ? '+' : ''}{r.toFixed(2)} ft
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </div>

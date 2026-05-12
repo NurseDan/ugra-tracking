@@ -25,6 +25,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at timestamptz;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS default_email     text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS default_min_level text not null default 'ORANGE';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS default_channels  jsonb not null default '["push"]'::jsonb;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone             text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id      text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id  text;
 
 CREATE TABLE IF NOT EXISTS sessions (
   sid     varchar primary key,
