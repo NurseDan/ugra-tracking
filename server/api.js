@@ -6,6 +6,7 @@ import { getPublicKey } from './push.js'
 import { validateWebhookUrl } from './webhooks.js'
 import { dispatchToSubscription } from './alertEngine.js'
 import { limitsFor } from './plans.js'
+import { PROVIDERS, isValidProvider, storeUserLlmKey, deleteUserLlmKey, getUserLlmConfig } from './llm.js'
 import Stripe from 'stripe'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
@@ -461,6 +462,144 @@ router.post('/me/test-alert', isAuthenticated, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
+})
+
+// --- BYOK: user-provided LLM keys -------------------------------------
+
+router.get('/me/llm-key', isAuthenticated, async (req, res) => {
+  const cfg = await getUserLlmConfig(userId(req))
+  if (!cfg) return res.json({ configured: false, providers: listProviders() })
+  res.json({
+    configured: true,
+    provider: cfg.provider,
+    model: cfg.model,
+    last_four: cfg.last_four,
+    updated_at: cfg.updated_at,
+    providers: listProviders(),
+  })
+})
+
+router.put('/me/llm-key', isAuthenticated, async (req, res) => {
+  const { provider, model, key } = req.body || {}
+  if (!isValidProvider(provider)) return res.status(400).json({ error: 'Unsupported provider' })
+  try {
+    await storeUserLlmKey(userId(req), { provider, model, key })
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+router.delete('/me/llm-key', isAuthenticated, async (req, res) => {
+  await deleteUserLlmKey(userId(req))
+  res.json({ ok: true })
+})
+
+function listProviders() {
+  return Object.entries(PROVIDERS).map(([id, p]) => ({
+    id, label: p.label, defaultModel: p.defaultModel,
+  }))
+}
+
+// --- Community sensors (opt-in) ---------------------------------------
+
+const SENSOR_KINDS = new Set(['water_level', 'rain', 'other'])
+
+router.get('/me/sensors', isAuthenticated, async (req, res) => {
+  const r = await query(
+    `SELECT id, label, kind, lat, lng, is_public, consent_at, created_at
+       FROM community_sensors WHERE user_id = $1 ORDER BY created_at DESC`,
+    [userId(req)]
+  )
+  res.json(r.rows)
+})
+
+router.post('/me/sensors', isAuthenticated, async (req, res) => {
+  const { label, kind, lat, lng, is_public, consent } = req.body || {}
+  if (typeof label !== 'string' || !label.trim() || label.length > 120)
+    return res.status(400).json({ error: 'label required (1–120 chars)' })
+  const k = kind || 'water_level'
+  if (!SENSOR_KINDS.has(k)) return res.status(400).json({ error: 'Invalid kind' })
+  const fLat = Number(lat), fLng = Number(lng)
+  if (!Number.isFinite(fLat) || fLat < -90 || fLat > 90)
+    return res.status(400).json({ error: 'lat must be -90..90' })
+  if (!Number.isFinite(fLng) || fLng < -180 || fLng > 180)
+    return res.status(400).json({ error: 'lng must be -180..180' })
+  if (consent !== true)
+    return res.status(400).json({ error: 'Explicit consent required to publish a sensor' })
+
+  const r = await query(
+    `INSERT INTO community_sensors (user_id, label, kind, lat, lng, is_public, consent_at)
+       VALUES ($1, $2, $3, $4, $5, $6, now()) RETURNING id`,
+    [userId(req), label.trim(), k, fLat, fLng, !!is_public]
+  )
+  res.json({ id: r.rows[0].id })
+})
+
+router.delete('/me/sensors/:id', isAuthenticated, async (req, res) => {
+  const r = await query(
+    `DELETE FROM community_sensors WHERE id = $1 AND user_id = $2`,
+    [req.params.id, userId(req)]
+  )
+  res.json({ deleted: r.rowCount })
+})
+
+// Reading ingest. Auth required; the sensor must belong to the caller.
+// The payload is opaque jsonb (height_ft, mm_per_hr, battery, etc.) so
+// hobbyist hardware can post whatever shape it has.
+router.post('/me/sensors/:id/readings', isAuthenticated, async (req, res) => {
+  const own = await query(
+    `SELECT id FROM community_sensors WHERE id = $1 AND user_id = $2`,
+    [req.params.id, userId(req)]
+  )
+  if (!own.rowCount) return res.status(404).json({ error: 'Sensor not found' })
+  const payload = req.body?.payload
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return res.status(400).json({ error: 'payload object required' })
+  // Cap payload size at ~2 KB so misbehaving devices can't fill the table.
+  if (JSON.stringify(payload).length > 2048)
+    return res.status(413).json({ error: 'payload too large (max 2 KB)' })
+  const observedAt = req.body?.observed_at ? new Date(req.body.observed_at) : new Date()
+  if (isNaN(observedAt)) return res.status(400).json({ error: 'invalid observed_at' })
+  await query(
+    `INSERT INTO sensor_readings (sensor_id, observed_at, payload)
+       VALUES ($1, $2, $3::jsonb)
+     ON CONFLICT (sensor_id, observed_at) DO UPDATE SET payload = EXCLUDED.payload`,
+    [req.params.id, observedAt.toISOString(), JSON.stringify(payload)]
+  )
+  res.json({ ok: true })
+})
+
+// Public view: only sensors the owner has explicitly marked public, with
+// the most recent reading attached. Useful for the public map.
+router.get('/sensors/community', async (_req, res) => {
+  const r = await query(
+    `SELECT s.id, s.label, s.kind, s.lat, s.lng,
+            r.observed_at AS last_observed_at, r.payload AS last_payload
+       FROM community_sensors s
+       LEFT JOIN LATERAL (
+         SELECT observed_at, payload FROM sensor_readings
+          WHERE sensor_id = s.id ORDER BY observed_at DESC LIMIT 1
+       ) r ON true
+      WHERE s.is_public = true AND s.consent_at IS NOT NULL
+      ORDER BY s.label ASC`)
+  res.json(r.rows)
+})
+
+router.get('/sensors/:id/history', async (req, res) => {
+  // History is public only for is_public sensors; private ones 404.
+  const meta = await query(
+    `SELECT id FROM community_sensors WHERE id = $1 AND is_public = true`,
+    [req.params.id]
+  )
+  if (!meta.rowCount) return res.status(404).json({ error: 'Sensor not found' })
+  const limit = Math.min(parseInt(req.query.limit, 10) || 500, 5000)
+  const r = await query(
+    `SELECT observed_at, payload FROM sensor_readings
+      WHERE sensor_id = $1 ORDER BY observed_at DESC LIMIT $2`,
+    [req.params.id, limit]
+  )
+  res.json(r.rows)
 })
 
 // --- Stripe routes ----------------------------------------------------

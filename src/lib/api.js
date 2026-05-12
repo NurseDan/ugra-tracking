@@ -100,3 +100,43 @@ export async function createCheckoutSession(priceId) {
 export async function createPortalSession() {
   return jsonFetch('/api/stripe/portal', { method: 'POST' })
 }
+
+// --- BYOK: user-managed LLM API key ----------------------------------
+
+export async function getLlmKey() {
+  return jsonFetch('/api/me/llm-key')
+}
+
+export async function saveLlmKey({ provider, model, key }) {
+  return jsonFetch('/api/me/llm-key', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, model, key }),
+  })
+}
+
+export async function deleteLlmKey() {
+  return jsonFetch('/api/me/llm-key', { method: 'DELETE' })
+}
+
+// --- Community sensors -----------------------------------------------
+
+export async function listMySensors() {
+  return jsonFetch('/api/me/sensors')
+}
+
+export async function createSensor(body) {
+  return jsonFetch('/api/me/sensors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteSensor(id) {
+  return jsonFetch(`/api/me/sensors/${id}`, { method: 'DELETE' })
+}
+
+export async function getCommunitySensors() {
+  return jsonFetch('/api/sensors/community')
+}
