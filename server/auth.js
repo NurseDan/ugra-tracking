@@ -40,6 +40,13 @@ function buildSession() {
   })
 }
 
+function adminEmails() {
+  return new Set(
+    (process.env.ADMIN_EMAILS || '')
+      .split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+  )
+}
+
 async function upsertUser(claims) {
   const id = `google:${claims.sub}`
   await query(
@@ -61,6 +68,20 @@ async function upsertUser(claims) {
       claims.sub
     ]
   )
+  // Promote configured admin emails. Promotion only happens on a verified
+  // Google login, never via password — there is no shared admin credential
+  // to leak. Demotion happens automatically if the email is removed from
+  // ADMIN_EMAILS so a former admin loses access on next sign-in.
+  const admins = adminEmails()
+  const email = (claims.email || '').toLowerCase()
+  if (email && claims.email_verified !== false) {
+    const target = admins.has(email) ? 'admin' : null
+    if (target === 'admin') {
+      await query("UPDATE users SET plan = 'admin' WHERE id = $1 AND plan <> 'admin'", [id])
+    } else {
+      await query("UPDATE users SET plan = 'free' WHERE id = $1 AND plan = 'admin'", [id])
+    }
+  }
   return id
 }
 
@@ -176,6 +197,20 @@ export async function setupAuth(app) {
 
   console.log('[auth] Google OAuth ready')
   return true
+}
+
+export const isAdmin = async (req, res, next) => {
+  return isAuthenticated(req, res, async () => {
+    try {
+      const id = req.user?.id ?? (req.user?.claims?.sub ? `google:${req.user.claims.sub}` : null)
+      if (!id) return res.status(401).json({ error: 'Unauthorized' })
+      const r = await query('SELECT plan FROM users WHERE id = $1', [id])
+      if (r.rows[0]?.plan !== 'admin') return res.status(403).json({ error: 'Forbidden' })
+      next()
+    } catch {
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  })
 }
 
 export const isAuthenticated = async (req, res, next) => {

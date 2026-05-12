@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { query } from './db.js'
 import { GAUGES } from '../src/config/gauges.js'
-import { isAuthenticated } from './auth.js'
+import { isAuthenticated, isAdmin } from './auth.js'
 import { getPublicKey } from './push.js'
 import { validateWebhookUrl } from './webhooks.js'
 import { dispatchToSubscription } from './alertEngine.js'
@@ -600,6 +600,63 @@ router.get('/sensors/:id/history', async (req, res) => {
     [req.params.id, limit]
   )
   res.json(r.rows)
+})
+
+// --- Admin (env-promoted) ---------------------------------------------
+// Admins inherit every standard user capability (plan='admin' satisfies
+// limitsFor) and additionally get this backend-management surface.
+// Promotion happens via ADMIN_EMAILS at login — there is no shared
+// password. Every action runs under the operator's own Google identity
+// so sessions and audit trails remain attributable.
+
+const ALLOWED_PLANS = new Set(['free', 'member', 'pro', 'pro_plus', 'admin'])
+
+router.get('/admin/users', isAdmin, async (req, res) => {
+  const q = (req.query.q || '').toString().trim().toLowerCase()
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500)
+  const params = []
+  let where = ''
+  if (q) { params.push(`%${q}%`); where = `WHERE LOWER(email) LIKE $1 OR LOWER(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) LIKE $1` }
+  params.push(limit)
+  const r = await query(
+    `SELECT id, email, first_name, last_name, plan, created_at, updated_at
+       FROM users ${where}
+       ORDER BY created_at DESC LIMIT $${params.length}`,
+    params
+  )
+  res.json(r.rows)
+})
+
+router.patch('/admin/users/:id/plan', isAdmin, async (req, res) => {
+  const { plan } = req.body || {}
+  if (!ALLOWED_PLANS.has(plan)) return res.status(400).json({ error: 'Invalid plan' })
+  await query('UPDATE users SET plan = $2, updated_at = now() WHERE id = $1', [req.params.id, plan])
+  res.json({ ok: true })
+})
+
+router.post('/admin/users/:id/revoke-sessions', isAdmin, async (req, res) => {
+  const r = await query(
+    `DELETE FROM sessions WHERE sess->'passport'->'user'->>'id' = $1`,
+    [req.params.id]
+  )
+  res.json({ revoked: r.rowCount })
+})
+
+router.get('/admin/stats', isAdmin, async (_req, res) => {
+  const [users, subs, ai, sensors] = await Promise.all([
+    query(`SELECT plan, COUNT(*)::int AS n FROM users GROUP BY plan`),
+    query(`SELECT COUNT(*)::int AS n FROM alert_subscriptions WHERE enabled`),
+    query(`SELECT COALESCE(SUM(request_count),0)::int AS n FROM ai_usage WHERE date = CURRENT_DATE`),
+    query(`SELECT COUNT(*)::int AS total,
+                  COUNT(*) FILTER (WHERE is_public)::int AS public
+             FROM community_sensors`),
+  ])
+  res.json({
+    users_by_plan: Object.fromEntries(users.rows.map(r => [r.plan, r.n])),
+    active_subscriptions: subs.rows[0]?.n ?? 0,
+    ai_calls_today: ai.rows[0]?.n ?? 0,
+    sensors: sensors.rows[0] ?? { total: 0, public: 0 },
+  })
 })
 
 // --- Stripe routes ----------------------------------------------------
