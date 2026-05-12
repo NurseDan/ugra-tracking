@@ -10,6 +10,10 @@ import apiRouter from './server/api.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
+
+// Capture raw body for Stripe webhook signature verification
+app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }))
+
 app.use(express.json({ limit: '64kb' }))
 
 // --- Existing OpenAI proxy --------------------------------------------

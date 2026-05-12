@@ -87,9 +87,12 @@ export default function Landing() {
           <Activity size={22} color="#60a5fa" />
           Track the Guad
         </div>
-        <button className="landing-btn landing-btn--outline" onClick={handleSignIn} disabled={loading}>
-          Sign in
-        </button>
+        <div className="landing-nav__links">
+          <a href="/pricing" className="landing-nav__link">Pricing</a>
+          <button className="landing-btn landing-btn--outline" onClick={handleSignIn} disabled={loading}>
+            Sign in
+          </button>
+        </div>
       </nav>
 
       {/* Hero */}

@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { User, CreditCard, Bell, AlertTriangle } from 'lucide-react'
 import {
   getCurrentUser, getUsage, updateProfile, updatePreferences,
-  signOutEverywhere, deleteAccount
+  signOutEverywhere, deleteAccount, createCheckoutSession, createPortalSession,
+  updateUserProfile
 } from '../lib/api'
 import './AccountSettings.css'
 
@@ -16,6 +18,19 @@ const TABS = [
 const LEVELS = ['YELLOW', 'ORANGE', 'RED', 'BLACK']
 const ALL_CHANNELS = ['push', 'email', 'webhook', 'sms']
 
+const PLAN_LABELS = {
+  free:     'Free',
+  member:   'Kerr County Member',
+  pro:      'Pro',
+  pro_plus: 'Pro+',
+  admin:    'Admin',
+}
+const PLAN_PRICES = {
+  member:   '$4.99/mo',
+  pro:      '$9.99/mo',
+  pro_plus: '$19.99/mo',
+}
+
 function initials(user) {
   const f = user?.first_name?.[0] || ''
   const l = user?.last_name?.[0] || ''
@@ -28,6 +43,7 @@ export default function AccountSettings() {
   const [usage, setUsage] = useState(null)
   const [tab, setTab] = useState('profile')
   const [msg, setMsg] = useState(null)
+  const [searchParams] = useSearchParams()
 
   async function refresh() {
     const u = await getCurrentUser()
@@ -36,7 +52,14 @@ export default function AccountSettings() {
       try { setUsage(await getUsage()) } catch {}
     }
   }
-  useEffect(() => { refresh() }, [])
+
+  useEffect(() => {
+    refresh()
+    if (searchParams.get('upgraded') === '1') {
+      setTab('plan')
+      setMsg({ type: 'ok', text: 'Your plan has been upgraded!' })
+    }
+  }, [])
 
   function flash(type, text) {
     setMsg({ type, text })
@@ -84,7 +107,7 @@ export default function AccountSettings() {
         )}
 
         {tab === 'profile' && <ProfileTab user={user} onSaved={refresh} flash={flash} />}
-        {tab === 'plan' && <PlanTab user={user} usage={usage} />}
+        {tab === 'plan' && <PlanTab user={user} usage={usage} flash={flash} />}
         {tab === 'notif' && <NotificationsTab user={user} onSaved={refresh} flash={flash} />}
         {tab === 'danger' && <DangerTab flash={flash} />}
       </div>
@@ -95,14 +118,17 @@ export default function AccountSettings() {
 function ProfileTab({ user, onSaved, flash }) {
   const [firstName, setFirstName] = useState(user.first_name || '')
   const [lastName, setLastName] = useState(user.last_name || '')
+  const [phone, setPhone] = useState(user.phone || '')
   const [saving, setSaving] = useState(false)
-  const dirty = firstName !== (user.first_name || '') || lastName !== (user.last_name || '')
+  const dirty = firstName !== (user.first_name || '') ||
+                lastName !== (user.last_name || '') ||
+                phone !== (user.phone || '')
 
   async function onSave(e) {
     e.preventDefault()
     setSaving(true)
     try {
-      await updateProfile({ first_name: firstName, last_name: lastName })
+      await updateProfile({ first_name: firstName, last_name: lastName, phone })
       flash('ok', 'Profile saved.')
       await onSaved()
     } catch (err) { flash('err', err.message) }
@@ -112,7 +138,7 @@ function ProfileTab({ user, onSaved, flash }) {
   return (
     <>
       <h2 className="account__section-title">Profile</h2>
-      <p className="account__section-desc">Your name and account identity.</p>
+      <p className="account__section-desc">Your name, phone number, and account identity.</p>
 
       <div className="account__card">
         <div className="account__profile-row">
@@ -139,6 +165,12 @@ function ProfileTab({ user, onSaved, flash }) {
               onChange={e => setLastName(e.target.value)} maxLength={80} />
           </div>
           <div className="account__field">
+            <label className="account__field-label" htmlFor="ph">Phone (for SMS alerts)</label>
+            <input id="ph" type="tel" className="account__input" value={phone}
+              onChange={e => setPhone(e.target.value)} maxLength={30}
+              placeholder="+1 (555) 000-0000" />
+          </div>
+          <div className="account__field">
             <span className="account__field-label">Email</span>
             <span className="account__field-value">{user.email || '—'}</span>
           </div>
@@ -156,12 +188,37 @@ function ProfileTab({ user, onSaved, flash }) {
   )
 }
 
-function PlanTab({ user, usage }) {
+function PlanTab({ user, usage, flash }) {
   const plan = (user.plan || 'free').toLowerCase()
   const subUsed = usage?.subscriptions.used ?? 0
   const subLimit = usage?.subscriptions.limit
   const aiUsed = usage?.aiCalls.used ?? 0
   const aiLimit = usage?.aiCalls.limit
+  const [busy, setBusy] = useState(null)
+  const isPaid = plan !== 'free' && plan !== 'admin'
+
+  const UPGRADE_PLANS = [
+    { key: 'member',   name: 'Member',  price: '$4.99/mo', color: '#10b981', priceId: import.meta.env.VITE_STRIPE_PRICE_MEMBER },
+    { key: 'pro',      name: 'Pro',     price: '$9.99/mo', color: '#6366f1', priceId: import.meta.env.VITE_STRIPE_PRICE_PRO },
+    { key: 'pro_plus', name: 'Pro+',    price: '$19.99/mo', color: '#f59e0b', priceId: import.meta.env.VITE_STRIPE_PRICE_PRO_PLUS },
+  ]
+
+  async function handleUpgrade(planKey, priceId) {
+    if (!priceId) { window.location.href = '/pricing'; return }
+    setBusy(planKey)
+    try {
+      const { url } = await createCheckoutSession(priceId)
+      window.location.href = url
+    } catch (err) { flash('err', err.message); setBusy(null) }
+  }
+
+  async function handlePortal() {
+    setBusy('portal')
+    try {
+      const { url } = await createPortalSession()
+      window.location.href = url
+    } catch (err) { flash('err', err.message); setBusy(null) }
+  }
 
   return (
     <>
@@ -170,17 +227,19 @@ function PlanTab({ user, usage }) {
 
       <div className="account__plan-banner">
         <div>
-          <div className="account__plan-name">{plan}</div>
+          <div className="account__plan-name">{PLAN_LABELS[plan] || plan}</div>
           <div className="account__plan-meta">
-            {plan === 'free'  && 'Up to 2 alerts · Push only'}
-            {plan === 'pro'   && 'Up to 10 alerts · Push, email, webhook · 50 AI calls/day'}
-            {plan === 'admin' && 'Unlimited alerts and AI calls'}
+            {plan === 'free'     && 'View-only · No alerts'}
+            {plan === 'member'   && '5 alerts · Push only · ' + PLAN_PRICES.member}
+            {plan === 'pro'      && '15 alerts · Push, email, SMS · 20 AI/day · ' + PLAN_PRICES.pro}
+            {plan === 'pro_plus' && 'Unlimited alerts · All channels · ' + PLAN_PRICES.pro_plus}
+            {plan === 'admin'    && 'Unlimited — Admin access'}
           </div>
         </div>
-        {plan === 'free' && (
-          <a href="mailto:support@example.com?subject=Upgrade%20to%20Pro" className="account__btn">
-            Upgrade
-          </a>
+        {(isPaid) && (
+          <button className="account__btn" onClick={handlePortal} disabled={busy === 'portal'}>
+            {busy === 'portal' ? 'Redirecting…' : 'Manage billing'}
+          </button>
         )}
       </div>
 
@@ -188,6 +247,34 @@ function PlanTab({ user, usage }) {
         <UsageBar label="Alert subscriptions" used={subUsed} limit={subLimit} />
         <UsageBar label="AI briefings today" used={aiUsed} limit={aiLimit} />
       </div>
+
+      {plan === 'free' && (
+        <div className="account__upgrade-section">
+          <h3 className="account__upgrade-title">Upgrade your plan</h3>
+          <div className="account__upgrade-cards">
+            {UPGRADE_PLANS.map(p => (
+              <div key={p.key} className="account__upgrade-card" style={{ '--plan-color': p.color }}>
+                <div className="account__upgrade-card-name" style={{ color: p.color }}>{p.name}</div>
+                <div className="account__upgrade-card-price">{p.price}</div>
+                <Link to={`/plans/${p.key === 'pro_plus' ? 'pro-plus' : p.key}`} className="account__upgrade-card-detail">
+                  See features →
+                </Link>
+                <button
+                  className="account__btn account__btn--plan"
+                  style={{ background: p.color }}
+                  onClick={() => handleUpgrade(p.key, p.priceId)}
+                  disabled={busy === p.key}
+                >
+                  {busy === p.key ? 'Redirecting…' : `Upgrade to ${p.name}`}
+                </button>
+              </div>
+            ))}
+          </div>
+          <p style={{ textAlign: 'center', marginTop: 12 }}>
+            <Link to="/pricing" style={{ color: '#60a5fa' }}>Compare all plans →</Link>
+          </p>
+        </div>
+      )}
     </>
   )
 }

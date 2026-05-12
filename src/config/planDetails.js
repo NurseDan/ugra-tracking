@@ -1,0 +1,60 @@
+export const PLAN_DETAILS = {
+  member: {
+    name: 'Kerr County Member',
+    tagline: 'Essential flood awareness for Kerr County residents',
+    monthlyPrice: 4.99,
+    yearlyMonthlyPrice: 3.99,
+    color: '#10b981',
+    priceEnvMonth: 'VITE_STRIPE_PRICE_MEMBER',
+    priceEnvYear: 'VITE_STRIPE_PRICE_MEMBER_YEAR',
+    features: [
+      { label: 'Push alerts', desc: 'Instant mobile push for 5 monitored gauges' },
+      { label: '5 alert subscriptions', desc: 'Track up to 5 gauges simultaneously' },
+      { label: 'Real-time dashboard', desc: 'Full river corridor and gauge cards' },
+      { label: 'Incident history', desc: 'Browse past flood events and level changes' },
+      { label: 'NWS alert forwarding', desc: 'Get push notifications for NWS flood warnings' },
+    ],
+    notIncluded: ['SMS / email alerts', 'AI river briefings', 'Data exports'],
+    useCases: 'Perfect for Kerr County homeowners who want to know when the Guadalupe is rising before it reaches their property.',
+  },
+  pro: {
+    name: 'Pro',
+    tagline: 'Full alert channels and AI-powered river briefings',
+    monthlyPrice: 9.99,
+    yearlyMonthlyPrice: 7.99,
+    color: '#6366f1',
+    priceEnvMonth: 'VITE_STRIPE_PRICE_PRO',
+    priceEnvYear: 'VITE_STRIPE_PRICE_PRO_YEAR',
+    features: [
+      { label: '15 alert subscriptions', desc: 'Monitor up to 15 gauge points at once' },
+      { label: 'Push, email & SMS alerts', desc: 'Get notified on every channel you prefer' },
+      { label: 'AI river briefings', desc: '20 AI-generated daily briefings with forecasts and context' },
+      { label: 'Real-time dashboard', desc: 'Full river corridor and gauge cards' },
+      { label: 'Incident history', desc: 'Browse past flood events and level changes' },
+    ],
+    notIncluded: ['Data exports'],
+    useCases: 'Ideal for river guides, first responders, and property owners who need instant multi-channel alerts and AI-powered context.',
+  },
+  pro_plus: {
+    name: 'Pro+',
+    tagline: 'Unlimited monitoring with data exports and every feature',
+    monthlyPrice: 19.99,
+    yearlyMonthlyPrice: 15.99,
+    color: '#f59e0b',
+    priceEnvMonth: 'VITE_STRIPE_PRICE_PRO_PLUS',
+    priceEnvYear: 'VITE_STRIPE_PRICE_PRO_PLUS_YEAR',
+    features: [
+      { label: 'Unlimited subscriptions', desc: 'Monitor every gauge without limits' },
+      { label: 'All alert channels', desc: 'Push, email, SMS, and webhook delivery' },
+      { label: 'Unlimited AI briefings', desc: 'As many AI river briefings as you need' },
+      { label: 'Data exports', desc: 'Download gauge readings and incidents as CSV or JSON' },
+      { label: 'Webhook integrations', desc: 'POST alerts to your own systems and automation' },
+      { label: 'Early access features', desc: 'Try new capabilities before general release' },
+    ],
+    notIncluded: [],
+    useCases: 'Built for emergency managers, river researchers, and organizations that need full data access and automation capabilities.',
+  },
+}
+
+export const TIER_SLUGS = { member: 'member', pro: 'pro', pro_plus: 'pro-plus' }
+export const SLUG_TO_KEY = { member: 'member', pro: 'pro', 'pro-plus': 'pro_plus' }

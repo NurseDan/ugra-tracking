@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { GAUGES, REFRESH_MS, FAST_FLOW_MPH, FLOOD_FLOW_MPH, STALE_AFTER_MINUTES } from './config/gauges'
 import { fetchUSGSGauges } from './lib/usgs'
 import { fetchPrecipitationForecast } from './lib/weatherApi'
@@ -9,7 +9,7 @@ import { logIncident } from './lib/incidentLog'
 import { formatCDT } from './lib/formatTime'
 import { mergeHistory, loadForecastCache, isForecastStale } from './lib/gaugeHistory'
 import { generateAllForecasts } from './lib/riseForecast'
-import { WifiOff } from 'lucide-react'
+import { WifiOff, Zap } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Dashboard from './pages/Dashboard'
 import GaugeDetail from './pages/GaugeDetail'
@@ -22,6 +22,10 @@ import AccountSettings from './pages/AccountSettings'
 import AppHeader from './components/AppHeader'
 import { SentinelProvider } from './contexts/SentinelContext'
 import Landing from './pages/Landing'
+import Pricing from './pages/Pricing'
+import PlanDetail from './pages/PlanDetail'
+import UpgradeModal from './components/UpgradeModal'
+import { usePlan } from './hooks/usePlan'
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)) }
 
@@ -111,10 +115,38 @@ function AppRoutes() {
   }
 
   if (!session) {
-    return <Landing />
+    return (
+      <BrowserRouter>
+        <Routes>
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/plans/:tier" element={<PlanDetail />} />
+          <Route path="*" element={<Landing />} />
+        </Routes>
+      </BrowserRouter>
+    )
   }
 
   return <AuthenticatedApp />
+}
+
+function GatedRoute({ allowed, requiredTier, feature, children }) {
+  const [showModal, setShowModal] = useState(false)
+  const location = useLocation()
+  if (!allowed) {
+    return (
+      <>
+        <div style={{ filter: 'blur(4px)', pointerEvents: 'none', minHeight: '60vh' }}>
+          {children}
+        </div>
+        <UpgradeModal
+          requiredTier={requiredTier}
+          feature={feature}
+          onClose={() => setShowModal(false)}
+        />
+      </>
+    )
+  }
+  return children
 }
 
 function AuthenticatedApp() {
@@ -128,6 +160,7 @@ function AuthenticatedApp() {
     loadAllCachedForecasts({ allowStale: !getOnlineState() })
   )
   const prevAlertsRef = useRef({})
+  const { canAlert, canExport, isPaid, plan } = usePlan()
 
   useEffect(() => {
     fetchData()
@@ -243,13 +276,29 @@ function AuthenticatedApp() {
             {lastUpdate && <span style={{ marginLeft: 8, opacity: 0.7 }}>from {formatCDT(lastUpdate)}</span>}
           </div>
         )}
+        {!isPaid && (
+          <div className="upgrade-nudge">
+            <Zap size={14} />
+            You're on the free plan — <a href="/pricing">upgrade to get push alerts</a>
+          </div>
+        )}
         <Routes>
           <Route path="/" element={<Dashboard data={data} lastUpdate={lastUpdate} />} />
           <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
           <Route path="/incidents" element={<Incidents />} />
-          <Route path="/my-alerts" element={<MyAlerts data={data} />} />
-          <Route path="/exports" element={<Exports data={data} />} />
+          <Route path="/my-alerts" element={
+            <GatedRoute allowed={canAlert} requiredTier="member" feature="My Alerts">
+              <MyAlerts data={data} />
+            </GatedRoute>
+          } />
+          <Route path="/exports" element={
+            <GatedRoute allowed={canExport} requiredTier="pro_plus" feature="Data Exports">
+              <Exports data={data} />
+            </GatedRoute>
+          } />
           <Route path="/account" element={<AccountSettings />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/plans/:tier" element={<PlanDetail />} />
         </Routes>
       </BrowserRouter>
     </SentinelProvider>

@@ -76,6 +76,26 @@ export async function deleteAccount() {
   return jsonFetch('/api/me', { method: 'DELETE' })
 }
 
+export async function createCheckoutSession(priceId) {
+  return jsonFetch('/api/stripe/create-checkout-session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ priceId }),
+  })
+}
+
+export async function createPortalSession() {
+  return jsonFetch('/api/stripe/portal', { method: 'POST' })
+}
+
+export async function updateUserProfile(body) {
+  return jsonFetch('/api/auth/user', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 export function exportUrl(kind, fmt, params = {}) {
   const qs = new URLSearchParams(params).toString()
   return `/api/export/${kind}.${fmt}${qs ? `?${qs}` : ''}`

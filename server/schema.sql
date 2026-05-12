@@ -155,6 +155,11 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   PRIMARY KEY (user_id, date)
 );
 
+-- Stripe billing columns
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone text;
+
 -- VAPID keypair (single row).
 CREATE TABLE IF NOT EXISTS vapid_keys (
   id          int primary key default 1,

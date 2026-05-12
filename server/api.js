@@ -6,8 +6,23 @@ import { getPublicKey } from './push.js'
 import { validateWebhookUrl } from './webhooks.js'
 import { dispatchToSubscription } from './alertEngine.js'
 import { limitsFor } from './plans.js'
+import Stripe from 'stripe'
 
 const router = Router()
+
+const PRICE_TO_PLAN = {
+  [process.env.STRIPE_PRICE_MEMBER]:        'member',
+  [process.env.STRIPE_PRICE_PRO]:           'pro',
+  [process.env.STRIPE_PRICE_PRO_PLUS]:      'pro_plus',
+  [process.env.STRIPE_PRICE_MEMBER_YEAR]:   'member',
+  [process.env.STRIPE_PRICE_PRO_YEAR]:      'pro',
+  [process.env.STRIPE_PRICE_PRO_PLUS_YEAR]: 'pro_plus',
+}
+
+function getStripe() {
+  if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY not configured')
+  return new Stripe(process.env.STRIPE_SECRET_KEY)
+}
 
 const ALLOWED_LEVELS = new Set(['GREEN', 'YELLOW', 'ORANGE', 'RED', 'BLACK'])
 const ALLOWED_CHANNELS = new Set(['push', 'email', 'sms', 'webhook'])
@@ -362,17 +377,40 @@ router.get('/me/usage', isAuthenticated, async (req, res) => {
 })
 
 router.patch('/me/profile', isAuthenticated, async (req, res) => {
-  const { first_name, last_name } = req.body || {}
+  const { first_name, last_name, phone } = req.body || {}
   if (first_name != null && typeof first_name !== 'string') return res.status(400).json({ error: 'first_name must be a string' })
   if (last_name != null && typeof last_name !== 'string') return res.status(400).json({ error: 'last_name must be a string' })
+  if (phone != null && typeof phone !== 'string') return res.status(400).json({ error: 'phone must be a string' })
   const fn = first_name?.trim().slice(0, 80) || null
   const ln = last_name?.trim().slice(0, 80) || null
+  const ph = phone?.trim().slice(0, 30) || null
   await query(
     `UPDATE users SET first_name = COALESCE($2, first_name),
                       last_name  = COALESCE($3, last_name),
+                      phone      = COALESCE($4, phone),
                       updated_at = now()
        WHERE id = $1`,
-    [userId(req), fn, ln]
+    [userId(req), fn, ln, ph]
+  )
+  res.json({ ok: true })
+})
+
+// Alias used by AccountSettings PATCH /api/auth/user
+router.patch('/auth/user', isAuthenticated, async (req, res) => {
+  const { name, phone } = req.body || {}
+  if (name != null && typeof name !== 'string') return res.status(400).json({ error: 'name must be a string' })
+  if (phone != null && typeof phone !== 'string') return res.status(400).json({ error: 'phone must be a string' })
+  const parts = name?.trim().split(' ') ?? []
+  const fn = parts[0]?.slice(0, 80) || null
+  const ln = parts.slice(1).join(' ').slice(0, 80) || null
+  const ph = phone?.trim().slice(0, 30) || null
+  await query(
+    `UPDATE users SET first_name = COALESCE($2, first_name),
+                      last_name  = COALESCE($3, last_name),
+                      phone      = COALESCE($4, phone),
+                      updated_at = now()
+       WHERE id = $1`,
+    [userId(req), fn, ln, ph]
   )
   res.json({ ok: true })
 })
@@ -449,6 +487,108 @@ router.post('/me/test-alert', isAuthenticated, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
+})
+
+// --- Stripe -----------------------------------------------------------
+
+router.post('/stripe/create-checkout-session', isAuthenticated, async (req, res) => {
+  const { priceId } = req.body || {}
+  if (!priceId) return res.status(400).json({ error: 'priceId required' })
+  const stripe = getStripe()
+  const uid = userId(req)
+  const { rows: [userRow] } = await query('SELECT email, stripe_customer_id FROM users WHERE id = $1', [uid])
+  let customerId = userRow?.stripe_customer_id
+  if (!customerId) {
+    const customer = await stripe.customers.create({ email: userRow?.email, metadata: { userId: uid } })
+    customerId = customer.id
+    await query('UPDATE users SET stripe_customer_id = $2 WHERE id = $1', [uid, customerId])
+  }
+  const publicUrl = process.env.PUBLIC_URL || 'http://localhost:3001'
+  const session = await stripe.checkout.sessions.create({
+    customer: customerId,
+    mode: 'subscription',
+    line_items: [{ price: priceId, quantity: 1 }],
+    success_url: `${publicUrl}/account?upgraded=1`,
+    cancel_url: `${publicUrl}/account`,
+    metadata: { userId: uid },
+  })
+  res.json({ url: session.url })
+})
+
+router.post('/stripe/portal', isAuthenticated, async (req, res) => {
+  const stripe = getStripe()
+  const uid = userId(req)
+  const { rows: [userRow] } = await query('SELECT stripe_customer_id FROM users WHERE id = $1', [uid])
+  if (!userRow?.stripe_customer_id) return res.status(400).json({ error: 'No billing account found' })
+  const publicUrl = process.env.PUBLIC_URL || 'http://localhost:3001'
+  const session = await stripe.billingPortal.sessions.create({
+    customer: userRow.stripe_customer_id,
+    return_url: `${publicUrl}/account`,
+  })
+  res.json({ url: session.url })
+})
+
+// Webhook must receive raw body — mount before any JSON body-parser
+router.post('/stripe/webhook', async (req, res) => {
+  const sig = req.headers['stripe-signature']
+  if (!process.env.STRIPE_WEBHOOK_SECRET) return res.status(500).json({ error: 'Webhook secret not configured' })
+  let event
+  try {
+    const stripe = getStripe()
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET)
+  } catch (err) {
+    return res.status(400).send(`Webhook Error: ${err.message}`)
+  }
+
+  async function applyPlanFromPriceId(priceId, customerId, subscriptionId) {
+    const plan = PRICE_TO_PLAN[priceId] ?? null
+    if (!plan) return
+    await query(
+      `UPDATE users SET plan=$1, stripe_customer_id=$2, stripe_subscription_id=$3, updated_at=now()
+         WHERE stripe_customer_id=$2`,
+      [plan, customerId, subscriptionId]
+    )
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object
+    const uid = session.metadata?.userId
+    const customerId = session.customer
+    const subscriptionId = session.subscription
+    if (!subscriptionId) { res.json({ received: true }); return }
+    const stripe = getStripe()
+    const sub = await stripe.subscriptions.retrieve(subscriptionId)
+    const priceId = sub.items.data[0]?.price?.id
+    const plan = PRICE_TO_PLAN[priceId] ?? null
+    if (plan && uid) {
+      await query(
+        `UPDATE users SET plan=$1, stripe_customer_id=$2, stripe_subscription_id=$3, updated_at=now()
+           WHERE id=$4`,
+        [plan, customerId, subscriptionId, uid]
+      )
+    }
+  } else if (event.type === 'customer.subscription.updated') {
+    const sub = event.data.object
+    const priceId = sub.items.data[0]?.price?.id
+    if (sub.status === 'active') {
+      await applyPlanFromPriceId(priceId, sub.customer, sub.id)
+    } else if (['canceled', 'unpaid', 'past_due'].includes(sub.status)) {
+      await query(
+        `UPDATE users SET plan='free', stripe_subscription_id=NULL, updated_at=now()
+           WHERE stripe_customer_id=$1`,
+        [sub.customer]
+      )
+    }
+  } else if (event.type === 'customer.subscription.deleted') {
+    const sub = event.data.object
+    await query(
+      `UPDATE users SET plan='free', stripe_subscription_id=NULL, updated_at=now()
+         WHERE stripe_customer_id=$1`,
+      [sub.customer]
+    )
+  }
+
+  res.json({ received: true })
 })
 
 export default router
