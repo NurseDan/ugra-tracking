@@ -23,7 +23,7 @@ export default function AppHeader({ highestAlert, lastUpdate }) {
         <div className="app-header__top">
           <Link to="/" className="header-title app-header__brand">
             <Activity size={28} color="#60a5fa" />
-            Guadalupe Sentinel
+            Track the Guad
           </Link>
 
           <nav className="app-header__nav">
