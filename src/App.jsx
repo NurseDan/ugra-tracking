@@ -15,6 +15,8 @@ import Dashboard from './pages/Dashboard'
 import GaugeDetail from './pages/GaugeDetail'
 import Incidents from './pages/Incidents'
 import MyAlerts from './pages/MyAlerts'
+import PublicDashboard from './pages/PublicDashboard'
+import { useNotifications } from './hooks/useNotifications'
 import Exports from './pages/Exports'
 import AccountSettings from './pages/AccountSettings'
 import AppHeader from './components/AppHeader'
@@ -103,6 +105,9 @@ export default function App() {
   const [lastUpdate, setLastUpdate] = useState(null)
   const [fetchError, setFetchError] = useState(false)
   const [isOffline, setIsOffline] = useState(() => !getOnlineState())
+
+    // Issue #3: RED/BLACK browser push notifications
+  useNotifications(data)
   const [cachedForecasts, setCachedForecasts] = useState(() =>
     loadAllCachedForecasts({ allowStale: !getOnlineState() })
   )
@@ -249,6 +254,7 @@ export default function App() {
 
           <Routes>
             <Route path="/" element={<Dashboard forecasts={cachedForecasts} />} />
+                    <Route path="/public" element={<PublicDashboard />} />
             <Route path="/gauge/:id" element={<GaugeDetail />} />
             <Route path="/incidents" element={<Incidents />} />
             <Route path="/my-alerts" element={<MyAlerts />} />
