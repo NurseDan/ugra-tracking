@@ -19,9 +19,13 @@ import PublicDashboard from './pages/PublicDashboard'
 import { useNotifications } from './hooks/useNotifications'
 import Exports from './pages/Exports'
 import AccountSettings from './pages/AccountSettings'
+import Pricing from './pages/Pricing'
+import PlanDetail from './pages/PlanDetail'
 import AppHeader from './components/AppHeader'
+import UpgradeModal from './components/UpgradeModal'
 import { SentinelProvider } from './contexts/SentinelContext'
 import Landing from './pages/Landing'
+import { usePlan } from './hooks/usePlan'
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)) }
 
@@ -115,6 +119,39 @@ function AppRoutes() {
   }
 
   return <AuthenticatedApp />
+}
+
+function GatedRoute({ requiredPlan, featureName, children }) {
+  const { canAlert, canExport, loading } = usePlan()
+  const [showModal, setShowModal] = useState(false)
+
+  const allowed =
+    requiredPlan === 'member'   ? canAlert :
+    requiredPlan === 'pro_plus' ? canExport :
+    true
+
+  useEffect(() => {
+    if (!loading && !allowed) setShowModal(true)
+  }, [loading, allowed])
+
+  if (loading) return null
+  if (!allowed) {
+    return (
+      <>
+        {showModal && (
+          <UpgradeModal
+            requiredPlan={requiredPlan}
+            featureName={featureName}
+            onClose={() => setShowModal(false)}
+          />
+        )}
+        <div style={{ filter: 'blur(4px)', pointerEvents: 'none', userSelect: 'none' }}>
+          {children}
+        </div>
+      </>
+    )
+  }
+  return children
 }
 
 function AuthenticatedApp() {
@@ -247,9 +284,11 @@ function AuthenticatedApp() {
           <Route path="/" element={<Dashboard data={data} lastUpdate={lastUpdate} />} />
           <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
           <Route path="/incidents" element={<Incidents />} />
-          <Route path="/my-alerts" element={<MyAlerts data={data} />} />
-          <Route path="/exports" element={<Exports data={data} />} />
+          <Route path="/my-alerts" element={<GatedRoute requiredPlan="member" featureName="Alert Subscriptions"><MyAlerts data={data} /></GatedRoute>} />
+          <Route path="/exports" element={<GatedRoute requiredPlan="pro_plus" featureName="Data Exports"><Exports data={data} /></GatedRoute>} />
           <Route path="/account" element={<AccountSettings />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/plans/:tier" element={<PlanDetail />} />
         </Routes>
       </BrowserRouter>
     </SentinelProvider>

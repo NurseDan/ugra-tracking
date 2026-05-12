@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
-import { User, CreditCard, Bell, AlertTriangle } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { User, CreditCard, Bell, AlertTriangle, Zap, ExternalLink } from 'lucide-react'
 import {
   getCurrentUser, getUsage, updateProfile, updatePreferences,
-  signOutEverywhere, deleteAccount
+  signOutEverywhere, deleteAccount, updateUserProfile, createCheckoutSession, createPortalSession
 } from '../lib/api'
+import { PLAN_DETAILS, PLANS_ORDERED } from '../config/planDetails'
 import './AccountSettings.css'
 
 const TABS = [
@@ -15,6 +17,20 @@ const TABS = [
 
 const LEVELS = ['YELLOW', 'ORANGE', 'RED', 'BLACK']
 const ALL_CHANNELS = ['push', 'email', 'webhook', 'sms']
+
+const PRICE_IDS = {
+  member:   import.meta.env.VITE_STRIPE_PRICE_MEMBER,
+  pro:      import.meta.env.VITE_STRIPE_PRICE_PRO,
+  pro_plus: import.meta.env.VITE_STRIPE_PRICE_PRO_PLUS,
+}
+
+const PLAN_LABELS = {
+  free: 'Free',
+  member: 'Kerr County Member',
+  pro: 'Pro',
+  pro_plus: 'Pro+',
+  admin: 'Admin',
+}
 
 function initials(user) {
   const f = user?.first_name?.[0] || ''
@@ -38,9 +54,19 @@ export default function AccountSettings() {
   }
   useEffect(() => { refresh() }, [])
 
+  // Show upgrade=1 flash if redirected from Stripe checkout
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get('upgraded') === '1') {
+      flash('ok', 'Subscription activated! Your plan has been upgraded.')
+      window.history.replaceState({}, '', '/account')
+      refresh()
+    }
+  }, [])
+
   function flash(type, text) {
     setMsg({ type, text })
-    setTimeout(() => setMsg(null), 4000)
+    setTimeout(() => setMsg(null), 5000)
   }
 
   if (user === undefined) return <div className="account"><div>Loading…</div></div>
@@ -84,7 +110,7 @@ export default function AccountSettings() {
         )}
 
         {tab === 'profile' && <ProfileTab user={user} onSaved={refresh} flash={flash} />}
-        {tab === 'plan' && <PlanTab user={user} usage={usage} />}
+        {tab === 'plan' && <PlanTab user={user} usage={usage} flash={flash} />}
         {tab === 'notif' && <NotificationsTab user={user} onSaved={refresh} flash={flash} />}
         {tab === 'danger' && <DangerTab flash={flash} />}
       </div>
@@ -95,14 +121,18 @@ export default function AccountSettings() {
 function ProfileTab({ user, onSaved, flash }) {
   const [firstName, setFirstName] = useState(user.first_name || '')
   const [lastName, setLastName] = useState(user.last_name || '')
+  const [phone, setPhone] = useState(user.phone || '')
   const [saving, setSaving] = useState(false)
-  const dirty = firstName !== (user.first_name || '') || lastName !== (user.last_name || '')
+  const dirty =
+    firstName !== (user.first_name || '') ||
+    lastName  !== (user.last_name  || '') ||
+    phone     !== (user.phone      || '')
 
   async function onSave(e) {
     e.preventDefault()
     setSaving(true)
     try {
-      await updateProfile({ first_name: firstName, last_name: lastName })
+      await updateUserProfile({ first_name: firstName, last_name: lastName, phone })
       flash('ok', 'Profile saved.')
       await onSaved()
     } catch (err) { flash('err', err.message) }
@@ -112,7 +142,7 @@ function ProfileTab({ user, onSaved, flash }) {
   return (
     <>
       <h2 className="account__section-title">Profile</h2>
-      <p className="account__section-desc">Your name and account identity.</p>
+      <p className="account__section-desc">Your name, contact info, and account identity.</p>
 
       <div className="account__card">
         <div className="account__profile-row">
@@ -128,16 +158,27 @@ function ProfileTab({ user, onSaved, flash }) {
         </div>
 
         <form onSubmit={onSave}>
-          <div className="account__field">
-            <label className="account__field-label" htmlFor="fn">First name</label>
-            <input id="fn" className="account__input" value={firstName}
-              onChange={e => setFirstName(e.target.value)} maxLength={80} />
+          <div className="account__fields-row">
+            <div className="account__field">
+              <label className="account__field-label" htmlFor="fn">First name</label>
+              <input id="fn" className="account__input" value={firstName}
+                onChange={e => setFirstName(e.target.value)} maxLength={80} />
+            </div>
+            <div className="account__field">
+              <label className="account__field-label" htmlFor="ln">Last name</label>
+              <input id="ln" className="account__input" value={lastName}
+                onChange={e => setLastName(e.target.value)} maxLength={80} />
+            </div>
           </div>
+
           <div className="account__field">
-            <label className="account__field-label" htmlFor="ln">Last name</label>
-            <input id="ln" className="account__input" value={lastName}
-              onChange={e => setLastName(e.target.value)} maxLength={80} />
+            <label className="account__field-label" htmlFor="ph">Phone number</label>
+            <input id="ph" type="tel" className="account__input" value={phone}
+              onChange={e => setPhone(e.target.value)} maxLength={20}
+              placeholder="+1 (555) 000-0000" />
+            <span className="account__field-hint">Used for SMS alerts on Pro plan and above.</span>
           </div>
+
           <div className="account__field">
             <span className="account__field-label">Email</span>
             <span className="account__field-value">{user.email || '—'}</span>
@@ -156,38 +197,118 @@ function ProfileTab({ user, onSaved, flash }) {
   )
 }
 
-function PlanTab({ user, usage }) {
-  const plan = (user.plan || 'free').toLowerCase()
+function PlanTab({ user, usage, flash }) {
+  const plan = user.plan || 'free'
+  const planDetails = PLAN_DETAILS[plan] || PLAN_DETAILS.free
   const subUsed = usage?.subscriptions.used ?? 0
   const subLimit = usage?.subscriptions.limit
   const aiUsed = usage?.aiCalls.used ?? 0
   const aiLimit = usage?.aiCalls.limit
+  const [upgrading, setUpgrading] = useState(null)
+  const [portalLoading, setPortalLoading] = useState(false)
+
+  async function handleUpgrade(planKey) {
+    const priceId = PRICE_IDS[planKey]
+    if (!priceId) { flash('err', 'Stripe not configured yet.'); return }
+    setUpgrading(planKey)
+    try {
+      const { url } = await createCheckoutSession(priceId)
+      window.location.href = url
+    } catch (err) {
+      flash('err', err.message)
+      setUpgrading(null)
+    }
+  }
+
+  async function handlePortal() {
+    setPortalLoading(true)
+    try {
+      const { url } = await createPortalSession()
+      window.location.href = url
+    } catch (err) {
+      flash('err', err.message)
+      setPortalLoading(false)
+    }
+  }
+
+  const isPaid = plan !== 'free' && plan !== 'admin'
 
   return (
     <>
       <h2 className="account__section-title">Plan & usage</h2>
       <p className="account__section-desc">Your subscription tier and current consumption.</p>
 
-      <div className="account__plan-banner">
+      {/* Current plan banner */}
+      <div className="account__plan-banner" style={{ '--plan-color': planDetails.color }}>
         <div>
-          <div className="account__plan-name">{plan}</div>
+          <div className="account__plan-name" style={{ color: planDetails.color }}>
+            {PLAN_LABELS[plan] || plan}
+          </div>
           <div className="account__plan-meta">
-            {plan === 'free'  && 'Up to 2 alerts · Push only'}
-            {plan === 'pro'   && 'Up to 10 alerts · Push, email, webhook · 50 AI calls/day'}
-            {plan === 'admin' && 'Unlimited alerts and AI calls'}
+            {plan === 'free'     && 'View-only access · No alerts or AI'}
+            {plan === 'member'   && 'Up to 5 alert subscriptions · Push alerts'}
+            {plan === 'pro'      && 'Up to 15 subscriptions · Push, SMS, email · 20 AI calls/day'}
+            {plan === 'pro_plus' && 'Unlimited subscriptions · All channels · Unlimited AI · Data exports'}
+            {plan === 'admin'    && 'Admin — unrestricted access'}
           </div>
         </div>
+        {isPaid && (
+          <button className="account__btn" onClick={handlePortal} disabled={portalLoading}>
+            <ExternalLink size={14} />
+            {portalLoading ? 'Loading…' : 'Manage billing'}
+          </button>
+        )}
         {plan === 'free' && (
-          <a href="mailto:support@example.com?subject=Upgrade%20to%20Pro" className="account__btn">
-            Upgrade
-          </a>
+          <Link to="/pricing" className="account__btn" style={{ background: '#3b82f6', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <Zap size={14} /> View plans
+          </Link>
         )}
       </div>
 
+      {/* Usage bars */}
       <div className="account__card">
         <UsageBar label="Alert subscriptions" used={subUsed} limit={subLimit} />
         <UsageBar label="AI briefings today" used={aiUsed} limit={aiLimit} />
       </div>
+
+      {/* Upgrade cards for free/member/pro users */}
+      {plan !== 'pro_plus' && plan !== 'admin' && (
+        <div className="account__upgrade-section">
+          <h3 className="account__upgrade-title">Upgrade your plan</h3>
+          <div className="account__upgrade-cards">
+            {PLANS_ORDERED.filter(k => {
+              const order = { free: 0, member: 1, pro: 2, pro_plus: 3, admin: 99 }
+              return k !== 'free' && order[k] > order[plan]
+            }).map(key => {
+              const p = PLAN_DETAILS[key]
+              return (
+                <div key={key} className="account__upgrade-card" style={{ '--plan-color': p.color }}>
+                  {p.badge && <div className="account__upgrade-badge">{p.badge}</div>}
+                  <div className="account__upgrade-plan-name">{p.name}</div>
+                  <div className="account__upgrade-price">${p.monthlyPrice}<span>/mo</span></div>
+                  <ul className="account__upgrade-features">
+                    {p.features.filter(f => f.included).slice(0, 4).map((f, i) => (
+                      <li key={i}>✓ {f.label}</li>
+                    ))}
+                  </ul>
+                  <Link to={`/plans/${key}`} className="account__upgrade-detail-link">
+                    See full details
+                  </Link>
+                  <button
+                    className="account__btn account__upgrade-cta"
+                    style={{ background: p.color }}
+                    onClick={() => handleUpgrade(key)}
+                    disabled={upgrading === key}
+                  >
+                    <Zap size={13} />
+                    {upgrading === key ? 'Loading…' : p.cta}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
     </>
   )
 }
