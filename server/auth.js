@@ -15,6 +15,13 @@ const getOidcConfig = memoize(
   { maxAge: 3600_000 }
 )
 
+// 7-day session lifetime; we only push the expiration forward once it has
+// burned through more than half its window. That cuts the per-request
+// session-row UPDATE that connect-pg-simple does by default (every API
+// call, every poll tick) down to at most one UPDATE per (window / 2).
+const SESSION_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
+const SESSION_REFRESH_THRESHOLD_MS = Math.floor(SESSION_MAX_AGE_MS / 2)
+
 function buildSession() {
   if (!process.env.SESSION_SECRET) {
     throw new Error('SESSION_SECRET is required')
@@ -24,7 +31,8 @@ function buildSession() {
     pool,
     tableName: 'sessions',
     createTableIfMissing: false,
-    ttl: 7 * 24 * 60 * 60
+    ttl: SESSION_MAX_AGE_MS / 1000,
+    disableTouch: true,
   })
   return session({
     secret: process.env.SESSION_SECRET,
@@ -35,11 +43,21 @@ function buildSession() {
       httpOnly: true,
       secure: true,
       sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000
-    }
+      maxAge: SESSION_MAX_AGE_MS,
+    },
   })
 }
 
+function sessionRefresh(req, _res, next) {
+  if (!req.session || !req.sessionID || !req.sessionStore?.touch) return next()
+  const expires = req.session.cookie?.expires
+  const expiresMs = expires ? new Date(expires).getTime() : 0
+  const remaining = expiresMs - Date.now()
+  if (remaining > 0 && remaining < SESSION_REFRESH_THRESHOLD_MS) {
+    req.session.cookie.maxAge = SESSION_MAX_AGE_MS
+    req.sessionStore.touch(req.sessionID, req.session, () => {})
+  }
+  next()
 function adminEmails() {
   return new Set(
     (process.env.ADMIN_EMAILS || '')
@@ -105,6 +123,7 @@ export async function setupAuth(app) {
 
   app.set('trust proxy', 1)
   app.use(buildSession())
+  app.use(sessionRefresh)
   app.use(passport.initialize())
   app.use(passport.session())
 

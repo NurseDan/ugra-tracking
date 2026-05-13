@@ -158,6 +158,20 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   PRIMARY KEY (user_id, date)
 );
 
+-- Server-side cache of AI briefing responses, keyed by a SHA-256 over
+-- (model | system | user | schema). Lets the /api/chat proxy short-circuit
+-- repeat prompts and cuts OpenAI token spend across all users.
+CREATE TABLE IF NOT EXISTS ai_briefing_cache (
+  cache_key   text PRIMARY KEY,
+  model       text NOT NULL,
+  response    jsonb NOT NULL,
+  hits        int NOT NULL DEFAULT 0,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  expires_at  timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_briefing_cache_expires
+  ON ai_briefing_cache(expires_at);
+
 -- VAPID keypair (single row).
 CREATE TABLE IF NOT EXISTS vapid_keys (
   id          int primary key default 1,

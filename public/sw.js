@@ -20,12 +20,15 @@
  *     Iowa Mesonet, Canyon Lake). Capped to keep storage small on iOS.
  */
 
-const VERSION = 'v3'
+const VERSION = 'v4'
 const SHELL_CACHE = `gs-shell-${VERSION}`
 const DATA_CACHE = `gs-data-${VERSION}`
 
+const OFFLINE_URL = '/offline.html'
+
 const PRECACHE_URLS = [
   '/',
+  OFFLINE_URL,
   '/manifest.webmanifest',
   '/icon.svg',
   '/icons/icon-192.png',
@@ -149,7 +152,9 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(req.url)
   const isSameOrigin = url.origin === self.location.origin
 
-  // SPA navigations: network-first, fall back to cached '/' for offline.
+  // SPA navigations: network-first, fall back to cached '/', then to the
+  // emergency offline shell as a last resort so the user always lands on
+  // a useful page even when the SPA bundle is unreachable.
   if (req.mode === 'navigate') {
     event.respondWith(
       (async () => {
@@ -160,7 +165,12 @@ self.addEventListener('fetch', (event) => {
           return fresh
         } catch {
           const cache = await caches.open(SHELL_CACHE)
-          return (await cache.match('/')) || (await cache.match(req)) || Response.error()
+          return (
+            (await cache.match('/')) ||
+            (await cache.match(req)) ||
+            (await cache.match(OFFLINE_URL)) ||
+            Response.error()
+          )
         }
       })()
     )

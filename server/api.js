@@ -30,6 +30,16 @@ function userId(req) {
   return req.user?.id ?? (req.user?.claims?.sub ? `google:${req.user.claims.sub}` : undefined)
 }
 
+const ALLOWED_PLANS = new Set(['free', 'member', 'pro', 'pro_plus', 'admin'])
+
+async function isAdmin(req, res, next) {
+  const uid = userId(req)
+  if (!uid) return res.status(401).json({ error: 'Unauthorized' })
+  const r = await query('SELECT plan FROM users WHERE id = $1', [uid])
+  if (r.rows[0]?.plan !== 'admin') return res.status(403).json({ error: 'Admin only' })
+  next()
+}
+
 // --- Read APIs ---------------------------------------------------------
 
 router.get('/gauges', (_req, res) => {
@@ -780,6 +790,106 @@ router.post('/stripe/webhook', async (req, res) => {
   }
 
   res.json({ received: true })
+})
+
+// --- Admin (plan = 'admin' only) --------------------------------------
+
+router.get('/admin/stats', isAuthenticated, isAdmin, async (_req, res) => {
+  const [users, subs, incidents, ai, srcCache, srcHistory] = await Promise.all([
+    query(`SELECT plan, COUNT(*)::int AS n FROM users GROUP BY plan`),
+    query(`SELECT COUNT(*)::int AS n FROM alert_subscriptions`),
+    query(`SELECT COUNT(*)::int AS n, MAX(occurred_at) AS latest FROM incidents`),
+    query(`SELECT COALESCE(SUM(request_count),0)::int AS today
+             FROM ai_usage WHERE date = CURRENT_DATE`),
+    query(`SELECT COUNT(*)::int AS n FROM source_cache`),
+    query(`SELECT COUNT(*)::int AS n FROM source_history`),
+  ])
+  res.json({
+    usersByPlan: Object.fromEntries(users.rows.map(r => [r.plan, r.n])),
+    subscriptions: subs.rows[0].n,
+    incidents: incidents.rows[0].n,
+    latestIncident: incidents.rows[0].latest,
+    aiCallsToday: ai.rows[0].today,
+    sourceCacheKeys: srcCache.rows[0].n,
+    sourceHistoryRows: srcHistory.rows[0].n,
+  })
+})
+
+router.get('/admin/users', isAuthenticated, isAdmin, async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500)
+  const search = (req.query.q || '').toString().trim().toLowerCase()
+  const params = []
+  let where = ''
+  if (search) {
+    params.push(`%${search}%`)
+    where = `WHERE LOWER(email) LIKE $1 OR LOWER(COALESCE(first_name,'')) LIKE $1 OR LOWER(COALESCE(last_name,'')) LIKE $1`
+  }
+  params.push(limit)
+  const r = await query(
+    `SELECT id, email, first_name, last_name, plan, stripe_customer_id, created_at, updated_at
+       FROM users ${where}
+       ORDER BY updated_at DESC NULLS LAST
+       LIMIT $${params.length}`,
+    params
+  )
+  res.json(r.rows)
+})
+
+router.patch('/admin/users/:id', isAuthenticated, isAdmin, async (req, res) => {
+  const { plan } = req.body || {}
+  if (!ALLOWED_PLANS.has(plan)) return res.status(400).json({ error: 'Invalid plan' })
+  const r = await query(
+    `UPDATE users SET plan = $2, updated_at = now() WHERE id = $1 RETURNING id, plan`,
+    [req.params.id, plan]
+  )
+  if (!r.rowCount) return res.status(404).json({ error: 'User not found' })
+  res.json(r.rows[0])
+})
+
+router.get('/admin/incidents', isAuthenticated, isAdmin, async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 1000)
+  const r = await query(
+    `SELECT id, gauge_id, gauge_name, from_level, to_level, height_ft, flow_cfs, occurred_at
+       FROM incidents ORDER BY occurred_at DESC LIMIT $1`, [limit])
+  res.json(r.rows)
+})
+
+router.delete('/admin/incidents/:id', isAuthenticated, isAdmin, async (req, res) => {
+  const r = await query(`DELETE FROM incidents WHERE id = $1`, [req.params.id])
+  res.json({ deleted: r.rowCount })
+})
+
+router.get('/admin/source-cache', isAuthenticated, isAdmin, async (_req, res) => {
+  const r = await query(
+    `SELECT key, fetched_at, pg_column_size(payload) AS size_bytes
+       FROM source_cache ORDER BY fetched_at DESC`)
+  res.json(r.rows)
+})
+
+router.delete('/admin/source-cache/:key', isAuthenticated, isAdmin, async (req, res) => {
+  const r = await query(`DELETE FROM source_cache WHERE key = $1`, [req.params.key])
+  res.json({ deleted: r.rowCount })
+})
+
+router.get('/admin/ai-cache', isAuthenticated, isAdmin, async (_req, res) => {
+  const r = await query(
+    `SELECT cache_key, model, hits, created_at, expires_at,
+            pg_column_size(response) AS size_bytes
+       FROM ai_briefing_cache ORDER BY created_at DESC LIMIT 200`)
+  res.json(r.rows)
+})
+
+router.post('/admin/ai-cache/purge', isAuthenticated, isAdmin, async (_req, res) => {
+  const r = await query(`DELETE FROM ai_briefing_cache`)
+  res.json({ deleted: r.rowCount })
+})
+
+router.get('/admin/notifications', isAuthenticated, isAdmin, async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500)
+  const r = await query(
+    `SELECT id, subscription_id, incident_id, channel, status, error, sent_at
+       FROM notifications_sent ORDER BY sent_at DESC LIMIT $1`, [limit])
+  res.json(r.rows)
 })
 
 export default router

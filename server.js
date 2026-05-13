@@ -2,6 +2,7 @@ import express from 'express'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { existsSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { initSchema, query } from './server/db.js'
 import { startPoller } from './server/poller.js'
 import { setupAuth } from './server/auth.js'
@@ -86,6 +87,26 @@ setInterval(() => {
 }, RATE_LIMIT_WINDOW_MS * 2)
 
 const sanitize = s => s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+
+// Cache TTL for server-side AI briefing responses. Briefings are derived
+// from gauge/forecast snapshots that the poller refreshes every ~5 minutes,
+// so a 10 minute TTL captures repeated calls within a refresh window
+// without serving truly stale narrative.
+const AI_CACHE_TTL_MS = 10 * 60_000
+
+function aiCacheKey({ model, system, user, schema }) {
+  return createHash('sha256')
+    .update(model + '' + system + '' + user + '' + JSON.stringify(schema || null))
+    .digest('hex')
+}
+
+let lastCachePrune = 0
+async function pruneAiCache() {
+  if (Date.now() - lastCachePrune < 60_000) return
+  lastCachePrune = Date.now()
+  try { await query(`DELETE FROM ai_briefing_cache WHERE expires_at < now()`) }
+  catch (err) { console.warn('[ai-cache] prune failed:', err.message) }
+}
 
 function assertSchemaDepth(obj, depth = 0) {
   if (depth > 5) throw Object.assign(new Error('Schema too deep'), { status: 400 })
@@ -172,6 +193,29 @@ app.post('/api/chat', async (req, res) => {
       return res.status(429).json({ error: `Daily AI limit reached (${limits.aiCallsPerDay}). Add your own API key for unlimited use.` })
   }
 
+  const cleanSystem = sanitize(system)
+  const cleanUser   = sanitize(user)
+
+  // Server-side cache: identical (model, system, user, schema) within the
+  // TTL window returns the saved completion without spending OpenAI tokens.
+  await pruneAiCache()
+  const cacheKey = aiCacheKey({ model: resolvedModel, system: cleanSystem, user: cleanUser, schema })
+  try {
+    const hit = await query(
+      `UPDATE ai_briefing_cache SET hits = hits + 1
+        WHERE cache_key = $1 AND expires_at > now()
+        RETURNING response`,
+      [cacheKey]
+    )
+    if (hit.rowCount) {
+      res.set('X-AI-Cache', 'hit')
+      return res.json(hit.rows[0].response)
+    }
+  } catch (err) {
+    console.warn('[ai-cache] lookup failed:', err.message)
+  }
+  res.set('X-AI-Cache', 'miss')
+
   const body = {
     model: resolvedModel,
     temperature: 0.2,
@@ -208,6 +252,22 @@ app.post('/api/chat', async (req, res) => {
           }
         }
       } catch { /* non-JSON response — let caller handle */ }
+    }
+
+    // Persist the validated response for re-use within the TTL window.
+    try {
+      const expires = new Date(Date.now() + AI_CACHE_TTL_MS).toISOString()
+      await query(
+        `INSERT INTO ai_briefing_cache (cache_key, model, response, expires_at)
+         VALUES ($1, $2, $3::jsonb, $4)
+         ON CONFLICT (cache_key) DO UPDATE
+           SET response = EXCLUDED.response,
+               expires_at = EXCLUDED.expires_at,
+               hits = ai_briefing_cache.hits`,
+        [cacheKey, resolvedModel, JSON.stringify(result), expires]
+      )
+    } catch (err) {
+      console.warn('[ai-cache] store failed:', err.message)
     }
 
     res.json(result)

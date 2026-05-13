@@ -7,7 +7,8 @@ const STORAGE_KEY = 'gs:mapLayerPrefs:v1'
 const DEFAULT_STATE = Object.freeze({
   radar: true,
   qpe: false,
-  qpeWindow: DEFAULT_MRMS_WINDOW
+  qpeWindow: DEFAULT_MRMS_WINDOW,
+  publicSensors: true,
 })
 
 function readStored() {
@@ -63,8 +64,12 @@ export function useMapLayerPrefs() {
     ),
     []
   )
+  const setPublicSensors = useCallback(
+    (v) => setState((s) => ({ ...s, publicSensors: !!v })),
+    []
+  )
 
-  return { ...state, setRadar, setQpe, setQpeWindow }
+  return { ...state, setRadar, setQpe, setQpeWindow, setPublicSensors }
 }
 
 /**
@@ -107,6 +112,14 @@ export default function MapLayerControls({
             onChange={(e) => p.setQpe(e.target.checked)}
           />
           MRMS rainfall
+        </label>
+        <label className="map-layer-controls__toggle">
+          <input
+            type="checkbox"
+            checked={!!p.publicSensors}
+            onChange={(e) => p.setPublicSensors(e.target.checked)}
+          />
+          Public sensors
         </label>
       </div>
 

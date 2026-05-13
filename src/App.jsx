@@ -18,6 +18,7 @@ import AppHeader from './components/AppHeader'
 import UpgradeModal from './components/UpgradeModal'
 import { SentinelProvider } from './contexts/SentinelContext'
 import Landing from './pages/Landing'
+import Admin from './pages/Admin'
 import { usePlan } from './hooks/usePlan'
 
 // Lazy-load secondary routes so the dashboard's first paint is unblocked
@@ -289,16 +290,17 @@ function AuthenticatedApp() {
         )}
         <Suspense fallback={<RouteFallback />}>
           <Routes>
-            <Route path="/" element={<Dashboard data={data} lastUpdate={lastUpdate} />} />
-            <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
-            <Route path="/incidents" element={<Incidents />} />
-            <Route path="/my-alerts" element={<GatedRoute requiredPlan="member" featureName="Alert Subscriptions"><MyAlerts data={data} /></GatedRoute>} />
-            <Route path="/exports" element={<GatedRoute requiredPlan="pro_plus" featureName="Data Exports"><Exports data={data} /></GatedRoute>} />
-            <Route path="/account" element={<AccountSettings />} />
-            <Route path="/pricing" element={<Pricing />} />
-            <Route path="/plans/:tier" element={<PlanDetail />} />
-          </Routes>
-        </Suspense>
+          <Route path="/" element={<Dashboard data={data} lastUpdate={lastUpdate} />} />
+          <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
+          <Route path="/incidents" element={<Incidents />} />
+          <Route path="/my-alerts" element={<GatedRoute requiredPlan="member" featureName="Alert Subscriptions"><MyAlerts data={data} /></GatedRoute>} />
+          <Route path="/exports" element={<GatedRoute requiredPlan="pro_plus" featureName="Data Exports"><Exports data={data} /></GatedRoute>} />
+          <Route path="/account" element={<AccountSettings />} />
+          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/plans/:tier" element={<PlanDetail />} />
+          <Route path="/admin" element={<Admin />} />
+        </Routes>
+          </Suspense>
       </BrowserRouter>
     </SentinelProvider>
   )
