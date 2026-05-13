@@ -146,7 +146,11 @@ export async function callProvider({ provider, model, key, system, user, schema,
     body: JSON.stringify(body),
   })
   if (!upstream.ok) {
-    const text = (await upstream.text().catch(() => '')).slice(0, 500)
+    // Providers occasionally include the offending key in their error bodies
+    // (e.g. "Invalid API key: sk-..."). Strip anything that looks like a
+    // bearer/secret token before surfacing the message to the browser.
+    const raw = (await upstream.text().catch(() => '')).slice(0, 500)
+    const text = raw.replace(/\b(?:sk|rk|gsk|or)[-_][A-Za-z0-9_-]{8,}/g, '[redacted]')
     const err = new Error(text || `Upstream ${upstream.status}`)
     err.status = upstream.status
     throw err

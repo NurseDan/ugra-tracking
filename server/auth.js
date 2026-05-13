@@ -72,13 +72,18 @@ async function upsertUser(claims) {
   // Google login, never via password — there is no shared admin credential
   // to leak. Demotion happens automatically if the email is removed from
   // ADMIN_EMAILS so a former admin loses access on next sign-in.
+  // Strict verification: require an explicit true so a future OIDC provider
+  // that omits the claim never accidentally hands out admin rights. Google
+  // always populates email_verified, so this doesn't break the current flow.
   const admins = adminEmails()
   const email = (claims.email || '').toLowerCase()
-  if (email && claims.email_verified !== false) {
-    const target = admins.has(email) ? 'admin' : null
-    if (target === 'admin') {
+  const verified = claims.email_verified === true
+  if (email && verified) {
+    if (admins.has(email)) {
       await query("UPDATE users SET plan = 'admin' WHERE id = $1 AND plan <> 'admin'", [id])
     } else {
+      // Auto-demote anyone who was previously promoted but is no longer on
+      // the env list. Paid plans are unaffected because we only touch 'admin'.
       await query("UPDATE users SET plan = 'free' WHERE id = $1 AND plan = 'admin'", [id])
     }
   }

@@ -11,7 +11,7 @@
     "server": "node server.js",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node src/lib/nwsAlerts.test.mjs && node src/lib/alertEngine.test.mjs && node src/lib/surgeEngine.test.mjs && node src/lib/riseForecast.test.mjs && node src/lib/alertColors.test.mjs && node src/lib/formatTime.test.mjs && node server/alertEngine.test.mjs && node server/sources.test.mjs"
+    "test": "node src/lib/nwsAlerts.test.mjs && node src/lib/alertEngine.test.mjs && node src/lib/surgeEngine.test.mjs && node src/lib/riseForecast.test.mjs && node src/lib/alertColors.test.mjs && node src/lib/formatTime.test.mjs && node server/alertEngine.test.mjs && node server/sources.test.mjs && node server/llm.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.50.0",
