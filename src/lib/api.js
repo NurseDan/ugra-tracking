@@ -100,3 +100,52 @@ export async function createCheckoutSession(priceId) {
 export async function createPortalSession() {
   return jsonFetch('/api/stripe/portal', { method: 'POST' })
 }
+
+// --- Admin (plan = 'admin') -------------------------------------------
+
+export async function adminGetStats() {
+  return jsonFetch('/api/admin/stats')
+}
+
+export async function adminListUsers({ q = '', limit = 100 } = {}) {
+  const params = new URLSearchParams()
+  if (q) params.set('q', q)
+  params.set('limit', String(limit))
+  return jsonFetch(`/api/admin/users?${params.toString()}`)
+}
+
+export async function adminUpdateUserPlan(id, plan) {
+  return jsonFetch(`/api/admin/users/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan }),
+  })
+}
+
+export async function adminListIncidents(limit = 100) {
+  return jsonFetch(`/api/admin/incidents?limit=${limit}`)
+}
+
+export async function adminDeleteIncident(id) {
+  return jsonFetch(`/api/admin/incidents/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function adminListSourceCache() {
+  return jsonFetch('/api/admin/source-cache')
+}
+
+export async function adminDeleteSourceCache(key) {
+  return jsonFetch(`/api/admin/source-cache/${encodeURIComponent(key)}`, { method: 'DELETE' })
+}
+
+export async function adminListAiCache() {
+  return jsonFetch('/api/admin/ai-cache')
+}
+
+export async function adminPurgeAiCache() {
+  return jsonFetch('/api/admin/ai-cache/purge', { method: 'POST' })
+}
+
+export async function adminListNotifications(limit = 100) {
+  return jsonFetch(`/api/admin/notifications?limit=${limit}`)
+}

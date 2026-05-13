@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0b1220" />
+  <title>Emergency — Track the Guad</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0b1220;
+      color: #e2e8f0;
+      line-height: 1.45;
+    }
+    main { max-width: 760px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 26px; margin: 0 0 4px; }
+    h2 { font-size: 17px; margin: 24px 0 10px; color: #93c5fd; }
+    .lede { color: #94a3b8; margin: 0 0 20px; }
+    .panel {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 14px;
+    }
+    .panel--danger { border-color: #b91c1c; }
+    .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+    .row + .row { margin-top: 6px; border-top: 1px solid #1e293b; padding-top: 6px; }
+    .label { color: #94a3b8; font-size: 13px; }
+    .value { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .stale { color: #fbbf24; font-size: 11px; margin-left: 6px; }
+    .meta { color: #64748b; font-size: 12px; margin-top: 8px; }
+    a.btn {
+      display: inline-block;
+      background: #2563eb;
+      color: white;
+      padding: 10px 16px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    a.btn--danger { background: #dc2626; }
+    .tel { font-size: 18px; font-weight: 700; }
+    ul.contacts { list-style: none; padding: 0; margin: 0; }
+    ul.contacts li { padding: 8px 0; border-bottom: 1px solid #1e293b; }
+    ul.contacts li:last-child { border-bottom: 0; }
+    code { background: #1e293b; padding: 1px 6px; border-radius: 4px; font-size: 12px; }
+    .ok { color: #34d399; }
+    .bad { color: #f87171; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Emergency offline mode</h1>
+    <p class="lede" id="lede">You're offline or the app failed to load. This page works from the device cache.</p>
+
+    <div class="panel panel--danger">
+      <h2 style="margin-top:0;color:#fecaca">Life-threatening emergency</h2>
+      <p style="margin:0 0 10px">If you or someone nearby is in immediate danger from flooding:</p>
+      <a class="btn btn--danger" href="tel:911">Call 911</a>
+      <p class="meta">Turn around, don't drown. Six inches of moving water can knock a person down; two feet can sweep away a vehicle.</p>
+    </div>
+
+    <div class="panel">
+      <h2 style="margin-top:0">Last cached river status</h2>
+      <div id="cache-status">Reading device cache…</div>
+      <p class="meta" id="cache-meta"></p>
+    </div>
+
+    <div class="panel">
+      <h2 style="margin-top:0">Texas Hill Country contacts</h2>
+      <ul class="contacts">
+        <li>
+          <div class="label">Kerr County emergency dispatch</div>
+          <a class="tel" href="tel:+18308965574">(830) 896-5574</a>
+        </li>
+        <li>
+          <div class="label">Kendall County emergency dispatch</div>
+          <a class="tel" href="tel:+18302494227">(830) 249-4227</a>
+        </li>
+        <li>
+          <div class="label">Comal County emergency dispatch</div>
+          <a class="tel" href="tel:+18306206500">(830) 620-6500</a>
+        </li>
+        <li>
+          <div class="label">NWS Austin / San Antonio (info line)</div>
+          <a class="tel" href="tel:+18308294500">(830) 829-4500</a>
+        </li>
+        <li>
+          <div class="label">Texas non-emergency information</div>
+          <a class="tel" href="tel:211">2-1-1</a>
+        </li>
+        <li>
+          <div class="label">Report flood-damaged road (TxDOT)</div>
+          <a class="tel" href="tel:+18005588744">(800) 558-8744</a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="panel">
+      <h2 style="margin-top:0">When the network returns</h2>
+      <p style="margin:0 0 10px">Tap below to retry the full dashboard. Cached river data is replayed automatically.</p>
+      <a class="btn" href="/">Retry dashboard</a>
+    </div>
+  </main>
+
+  <script>
+    // Defensively read the same IndexedDB store the dashboard writes to.
+    // No frameworks, no network calls — has to work with everything offline.
+    const DB_NAME = 'sentinel_gauge_db'
+    const DB_VERSION = 1
+    const STORE_NAME = 'gauge_history'
+
+    function openDb() {
+      return new Promise((resolve) => {
+        if (typeof indexedDB === 'undefined') return resolve(null)
+        const req = indexedDB.open(DB_NAME, DB_VERSION)
+        req.onsuccess = (e) => resolve(e.target.result)
+        req.onerror = () => resolve(null)
+        req.onblocked = () => resolve(null)
+      })
+    }
+    function readAll(db) {
+      return new Promise((resolve) => {
+        if (!db || !db.objectStoreNames.contains(STORE_NAME)) return resolve([])
+        const tx = db.transaction(STORE_NAME, 'readonly')
+        const store = tx.objectStore(STORE_NAME)
+        const out = []
+        const req = store.openCursor()
+        req.onsuccess = (e) => {
+          const cur = e.target.result
+          if (!cur) return resolve(out)
+          out.push({ key: cur.key, value: cur.value })
+          cur.continue()
+        }
+        req.onerror = () => resolve(out)
+      })
+    }
+
+    function fmtTime(t) {
+      if (!t) return '—'
+      try { return new Date(t).toLocaleString() } catch { return String(t) }
+    }
+    function escape(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]))
+    }
+
+    function renderStatus(rows) {
+      const target = document.getElementById('cache-status')
+      const meta = document.getElementById('cache-meta')
+      if (!rows.length) {
+        target.innerHTML =
+          '<p class="bad">No cached gauge data on this device yet.</p>' +
+          '<p class="meta">Open the dashboard while online at least once so cached readings are available here.</p>'
+        return
+      }
+      // Each value is a history array of { time, height, flow, ... }
+      const items = rows
+        .map(({ key, value }) => {
+          const list = Array.isArray(value) ? value :
+                       Array.isArray(value?.history) ? value.history : []
+          const last = list[list.length - 1]
+          if (!last) return null
+          const ageMs = Date.now() - new Date(last.time).getTime()
+          const ageMin = Math.round(ageMs / 60000)
+          const stale = ageMin > 60
+          return { id: key, time: last.time, height: last.height, flow: last.flow, ageMin, stale }
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.id.localeCompare(b.id))
+
+      if (!items.length) {
+        target.innerHTML = '<p class="bad">Cache present but no readings found.</p>'
+        return
+      }
+
+      target.innerHTML = items.map((i) => `
+        <div class="row">
+          <div>
+            <div class="label">${escape(i.id)}</div>
+            <div class="value">${i.height ?? '—'} ft <span class="label">·</span> ${i.flow ?? '—'} cfs</div>
+          </div>
+          <div style="text-align:right">
+            <div class="label">${fmtTime(i.time)}</div>
+            <div class="label">${i.ageMin}m ago ${i.stale ? '<span class="stale">stale</span>' : ''}</div>
+          </div>
+        </div>
+      `).join('')
+
+      const newest = items.reduce((min, i) => Math.min(min, i.ageMin), Infinity)
+      meta.textContent = `${items.length} cached gauges · newest reading ${newest}m ago.`
+    }
+
+    function updateOnlineLede() {
+      const lede = document.getElementById('lede')
+      if (navigator.onLine) {
+        lede.innerHTML = 'Network connection restored. <a href="/" style="color:#93c5fd">Reload the full dashboard ↗</a>'
+      }
+    }
+    updateOnlineLede()
+    window.addEventListener('online', updateOnlineLede)
+
+    openDb().then(readAll).then(renderStatus).catch(() => {
+      document.getElementById('cache-status').textContent =
+        'Cache read failed. Use the emergency contacts above.'
+    })
+  </script>
+</body>
+</html>

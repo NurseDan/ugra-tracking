@@ -25,6 +25,7 @@ import AppHeader from './components/AppHeader'
 import UpgradeModal from './components/UpgradeModal'
 import { SentinelProvider } from './contexts/SentinelContext'
 import Landing from './pages/Landing'
+import Admin from './pages/Admin'
 import { usePlan } from './hooks/usePlan'
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)) }
@@ -289,6 +290,7 @@ function AuthenticatedApp() {
           <Route path="/account" element={<AccountSettings />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/plans/:tier" element={<PlanDetail />} />
+          <Route path="/admin" element={<Admin />} />
         </Routes>
       </BrowserRouter>
     </SentinelProvider>

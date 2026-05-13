@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
-import { Activity, AlertTriangle, Bell, Clock, Download, History, Settings, X } from 'lucide-react'
+import { Activity, AlertTriangle, Bell, Clock, Download, History, Settings, Shield, X } from 'lucide-react'
 import { ALERT_LEVELS } from '../lib/alertEngine'
 import { formatCDT } from '../lib/formatTime'
 import { GAUGES } from '../config/gauges'
 import NotificationSettings from './NotificationSettings'
+import { usePlan } from '../hooks/usePlan'
 import './AppHeader.css'
 
 export default function AppHeader({ highestAlert, lastUpdate }) {
   const [notifOpen, setNotifOpen] = useState(false)
+  const { plan } = usePlan()
 
   useEffect(() => {
     if (!notifOpen) return
@@ -42,6 +44,11 @@ export default function AppHeader({ highestAlert, lastUpdate }) {
             <NavLink to="/account" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
               <Settings size={14} /> Account
             </NavLink>
+            {plan === 'admin' && (
+              <NavLink to="/admin" className={({ isActive }) => `app-header__link ${isActive ? 'is-active' : ''}`}>
+                <Shield size={14} /> Admin
+              </NavLink>
+            )}
             <button
               type="button"
               className="app-header__notif-btn"
