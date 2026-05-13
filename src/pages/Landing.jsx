@@ -4,34 +4,34 @@ import { useAuth } from '../context/AuthContext'
 
 const FEATURES = [
   {
-    icon: <Activity size={22} color="#60a5fa" />,
-    title: 'Live USGS Data',
-    desc: 'Real-time water levels and flow rates from 6 official USGS gauge stations along the Guadalupe River corridor.'
+    icon: <Activity size={22} color="#2F6B86" />,
+    title: 'Live from the river',
+    desc: 'Water levels and flow rates streamed in from six USGS gauges between Hunt and Comfort, refreshed every minute.'
   },
   {
-    icon: <AlertTriangle size={22} color="#f97316" />,
-    title: 'Flood Alert System',
-    desc: 'Color-coded alerts from Normal through Critical. Know the danger level at every station at a glance.'
+    icon: <AlertTriangle size={22} color="#D9714A" />,
+    title: 'Plain-language alerts',
+    desc: 'Normal, elevated, warning, danger, critical — color-coded so a glance from the porch tells you what the river is doing.'
   },
   {
-    icon: <BarChart2 size={22} color="#a78bfa" />,
-    title: '48-Hour Trend Charts',
-    desc: 'Sparklines and full trend charts show how levels are moving, with rise/fall rates updated every minute.'
+    icon: <BarChart2 size={22} color="#5B6FB7" />,
+    title: '48-hour trends',
+    desc: 'Sparklines and full charts show direction and rate-of-rise, with rolling 5-, 15-, and 60-minute changes for every gauge.'
   },
   {
-    icon: <Map size={22} color="#10b981" />,
-    title: 'Interactive River Map',
-    desc: 'See all gauge stations plotted on an interactive map with live status indicators for each location.'
+    icon: <Map size={22} color="#5C7E5A" />,
+    title: 'River-corridor map',
+    desc: 'See every gauge plotted upstream-to-downstream on an interactive map with live color indicators per station.'
   },
   {
-    icon: <RefreshCw size={22} color="#60a5fa" />,
-    title: 'Auto-Refresh',
-    desc: 'The dashboard refreshes automatically every 60 seconds so you always have the latest readings without lifting a finger.'
+    icon: <RefreshCw size={22} color="#2F6B86" />,
+    title: 'Bring your own AI',
+    desc: 'Plug in your own OpenAI, Anthropic, Groq, or OpenRouter key for unlimited AI briefings — no platform quota, no surprise bills.'
   },
   {
-    icon: <Zap size={22} color="#f59e0b" />,
-    title: 'Surge Detection',
-    desc: 'Intelligent surge detection flags sudden rapid rises that could indicate flash flooding upstream.'
+    icon: <Zap size={22} color="#E0A04A" />,
+    title: 'Surge detection',
+    desc: 'A simple surge detector flags rapid upstream rises that often precede flash flooding downstream.'
   }
 ]
 
@@ -84,7 +84,7 @@ export default function Landing() {
       {/* Nav */}
       <nav className="landing-nav">
         <div className="landing-nav__brand">
-          <Activity size={22} color="#60a5fa" />
+          <Activity size={22} color="#2F6B86" />
           Track the Guad
         </div>
         <button className="landing-btn landing-btn--outline" onClick={handleSignIn} disabled={loading}>
@@ -94,12 +94,14 @@ export default function Landing() {
 
       {/* Hero */}
       <section className="landing-hero">
-        <div className="landing-hero__badge"><Shield size={13} /> Free river monitoring tool</div>
+        <div className="landing-hero__badge"><Shield size={13} /> Free for the Hill Country</div>
         <h1 className="landing-hero__title">
-          Real-time flood intelligence<br />for the <span className="landing-gradient-text">Guadalupe River</span>
+          Eyes on the river,<br />from <span className="landing-gradient-text">Hunt to Comfort</span>
         </h1>
         <p className="landing-hero__sub">
-          Monitor 6 USGS gauge stations from Hunt to Comfort. Live water levels, flow rates, surge alerts, and 48-hour trend charts — refreshed every 60 seconds.
+          A neighborly flood-awareness dashboard for the upper Guadalupe. Live USGS readings,
+          plain-language alerts, and trend charts — refreshed every minute and free for everyone
+          who calls the Hill Country home.
         </p>
         <div className="landing-hero__cta">
           <button className="landing-btn landing-btn--primary landing-btn--lg" onClick={handleSignIn} disabled={loading}>
@@ -119,8 +121,8 @@ export default function Landing() {
       {/* Features */}
       <section className="landing-features">
         <div className="landing-section-header">
-          <h2 className="landing-section-title">Everything you need to stay safe</h2>
-          <p className="landing-section-sub">Built for Texas Hill Country residents, campers, tubers, and anyone who needs to know what the Guadalupe is doing right now.</p>
+          <h2 className="landing-section-title">Built for Hill Country folks</h2>
+          <p className="landing-section-sub">For ranchers checking low-water crossings, parents at summer camp, tubers and outfitters, and anyone who needs to know what the Guadalupe is doing — right now.</p>
         </div>
         <div className="landing-features-grid">
           {FEATURES.map(f => (
@@ -136,8 +138,8 @@ export default function Landing() {
       {/* Stations strip */}
       <section className="landing-stations">
         <div className="landing-section-header">
-          <h2 className="landing-section-title">6 stations, one corridor</h2>
-          <p className="landing-section-sub">From the headwaters at Hunt downstream to Comfort — every key point monitored.</p>
+          <h2 className="landing-section-title">Six stations along the corridor</h2>
+          <p className="landing-section-sub">Headwaters at Hunt down through Kerrville and on to Comfort. Each one is a low-water crossing or a town that watches the rise.</p>
         </div>
         <div className="landing-stations-list">
           {['North Fork near Hunt', 'Hunt', 'Above Kerrville', 'Kerrville', 'Center Point', 'Comfort'].map((name, i) => (
@@ -152,11 +154,11 @@ export default function Landing() {
       {/* Final CTA */}
       <section className="landing-final-cta">
         <div className="landing-final-cta__inner glass-panel">
-          <h2 className="landing-final-cta__title">Ready to monitor the river?</h2>
-          <p className="landing-final-cta__sub">Sign up free and get instant access to live data, trend charts, and flood alerts.</p>
+          <h2 className="landing-final-cta__title">Ready to keep an eye on the river?</h2>
+          <p className="landing-final-cta__sub">Sign in free for live readings, trend charts, push alerts, and — if you want it — your own AI key for unlimited briefings.</p>
           <button className="landing-btn landing-btn--primary landing-btn--lg" onClick={handleSignIn} disabled={loading}>
             {loading ? <span className="landing-spinner" /> : <GoogleIcon />}
-            {loading ? 'Redirecting…' : 'Get started with Google'}
+            {loading ? 'Redirecting…' : 'Continue with Google'}
           </button>
         </div>
       </section>

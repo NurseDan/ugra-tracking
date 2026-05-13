@@ -87,9 +87,21 @@ export function createProxyProvider(options = {}) {
       if (!fetchImpl) {
         throw new Error('No fetch implementation available')
       }
+      // Mirror the CSRF cookie into the header (double-submit pattern).
+      let csrf = null
+      if (typeof document !== 'undefined') {
+        for (const part of document.cookie.split(';')) {
+          const [k, ...rest] = part.trim().split('=')
+          if (k === 'csrf') { csrf = decodeURIComponent(rest.join('=')); break }
+        }
+      }
       const res = await fetchImpl(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+        },
         body: JSON.stringify({ system, user, schema, schemaName, model }),
         signal
       })

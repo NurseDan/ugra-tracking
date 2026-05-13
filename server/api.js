@@ -1,11 +1,12 @@
 import { Router } from 'express'
 import { query } from './db.js'
 import { GAUGES } from '../src/config/gauges.js'
-import { isAuthenticated } from './auth.js'
+import { isAuthenticated, isAdmin } from './auth.js'
 import { getPublicKey } from './push.js'
 import { validateWebhookUrl } from './webhooks.js'
 import { dispatchToSubscription } from './alertEngine.js'
 import { limitsFor } from './plans.js'
+import { PROVIDERS, isValidProvider, storeUserLlmKey, deleteUserLlmKey, getUserLlmConfig } from './llm.js'
 import Stripe from 'stripe'
 
 const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
@@ -461,6 +462,234 @@ router.post('/me/test-alert', isAuthenticated, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
+})
+
+// --- BYOK: user-provided LLM keys -------------------------------------
+
+router.get('/me/llm-key', isAuthenticated, async (req, res) => {
+  const cfg = await getUserLlmConfig(userId(req))
+  if (!cfg) return res.json({ configured: false, providers: listProviders() })
+  res.json({
+    configured: true,
+    provider: cfg.provider,
+    model: cfg.model,
+    last_four: cfg.last_four,
+    updated_at: cfg.updated_at,
+    providers: listProviders(),
+  })
+})
+
+router.put('/me/llm-key', isAuthenticated, async (req, res) => {
+  const { provider, model, key } = req.body || {}
+  if (!isValidProvider(provider)) return res.status(400).json({ error: 'Unsupported provider' })
+  try {
+    await storeUserLlmKey(userId(req), { provider, model, key })
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+router.delete('/me/llm-key', isAuthenticated, async (req, res) => {
+  await deleteUserLlmKey(userId(req))
+  res.json({ ok: true })
+})
+
+function listProviders() {
+  return Object.entries(PROVIDERS).map(([id, p]) => ({
+    id, label: p.label, defaultModel: p.defaultModel,
+  }))
+}
+
+// --- Community sensors (opt-in) ---------------------------------------
+
+const SENSOR_KINDS = new Set(['water_level', 'rain', 'other'])
+
+router.get('/me/sensors', isAuthenticated, async (req, res) => {
+  const r = await query(
+    `SELECT id, label, kind, lat, lng, is_public, consent_at, created_at
+       FROM community_sensors WHERE user_id = $1 ORDER BY created_at DESC`,
+    [userId(req)]
+  )
+  res.json(r.rows)
+})
+
+router.post('/me/sensors', isAuthenticated, async (req, res) => {
+  const { label, kind, lat, lng, is_public, consent } = req.body || {}
+  if (typeof label !== 'string' || !label.trim() || label.length > 120)
+    return res.status(400).json({ error: 'label required (1–120 chars)' })
+  const k = kind || 'water_level'
+  if (!SENSOR_KINDS.has(k)) return res.status(400).json({ error: 'Invalid kind' })
+  const fLat = Number(lat), fLng = Number(lng)
+  if (!Number.isFinite(fLat) || fLat < -90 || fLat > 90)
+    return res.status(400).json({ error: 'lat must be -90..90' })
+  if (!Number.isFinite(fLng) || fLng < -180 || fLng > 180)
+    return res.status(400).json({ error: 'lng must be -180..180' })
+  if (consent !== true)
+    return res.status(400).json({ error: 'Explicit consent required to publish a sensor' })
+
+  const r = await query(
+    `INSERT INTO community_sensors (user_id, label, kind, lat, lng, is_public, consent_at)
+       VALUES ($1, $2, $3, $4, $5, $6, now()) RETURNING id`,
+    [userId(req), label.trim(), k, fLat, fLng, !!is_public]
+  )
+  res.json({ id: r.rows[0].id })
+})
+
+router.delete('/me/sensors/:id', isAuthenticated, async (req, res) => {
+  const r = await query(
+    `DELETE FROM community_sensors WHERE id = $1 AND user_id = $2`,
+    [req.params.id, userId(req)]
+  )
+  res.json({ deleted: r.rowCount })
+})
+
+// Reading ingest. Auth required; the sensor must belong to the caller.
+// The payload is opaque jsonb (height_ft, mm_per_hr, battery, etc.) so
+// hobbyist hardware can post whatever shape it has.
+//
+// A per-sensor token bucket caps ingest to ~12 readings/minute (one every
+// 5s on average, with a small burst). Honest devices stay well under;
+// misbehaving firmware can't fill the table or drown the disk.
+const SENSOR_BUCKETS = new Map()
+const SENSOR_BUCKET_CAP = 12
+const SENSOR_REFILL_PER_SEC = 12 / 60  // = 1 token every 5s
+
+function consumeSensorToken(sensorId) {
+  const now = Date.now()
+  let b = SENSOR_BUCKETS.get(sensorId)
+  if (!b) { b = { tokens: SENSOR_BUCKET_CAP, ts: now }; SENSOR_BUCKETS.set(sensorId, b) }
+  const elapsedSec = (now - b.ts) / 1000
+  b.tokens = Math.min(SENSOR_BUCKET_CAP, b.tokens + elapsedSec * SENSOR_REFILL_PER_SEC)
+  b.ts = now
+  if (b.tokens < 1) return false
+  b.tokens -= 1
+  return true
+}
+// Periodically prune buckets for sensors that haven't posted in 10 min so
+// the map can't grow unbounded across the lifetime of the process.
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60_000
+  for (const [id, b] of SENSOR_BUCKETS) if (b.ts < cutoff) SENSOR_BUCKETS.delete(id)
+}, 5 * 60_000).unref?.()
+
+router.post('/me/sensors/:id/readings', isAuthenticated, async (req, res) => {
+  const own = await query(
+    `SELECT id FROM community_sensors WHERE id = $1 AND user_id = $2`,
+    [req.params.id, userId(req)]
+  )
+  if (!own.rowCount) return res.status(404).json({ error: 'Sensor not found' })
+  if (!consumeSensorToken(req.params.id))
+    return res.status(429).json({ error: 'Sensor reading rate limit (12/min) — slow your posts down.' })
+  const payload = req.body?.payload
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return res.status(400).json({ error: 'payload object required' })
+  // Cap payload size at ~2 KB so misbehaving devices can't fill the table.
+  if (JSON.stringify(payload).length > 2048)
+    return res.status(413).json({ error: 'payload too large (max 2 KB)' })
+  const observedAt = req.body?.observed_at ? new Date(req.body.observed_at) : new Date()
+  if (isNaN(observedAt)) return res.status(400).json({ error: 'invalid observed_at' })
+  // Reject readings dated in the future or absurdly far in the past
+  // so a misconfigured clock can't poison the time series.
+  const ageMs = Date.now() - observedAt.getTime()
+  if (ageMs < -5 * 60_000) return res.status(400).json({ error: 'observed_at is in the future' })
+  if (ageMs >  7 * 24 * 60 * 60_000) return res.status(400).json({ error: 'observed_at older than 7 days' })
+  await query(
+    `INSERT INTO sensor_readings (sensor_id, observed_at, payload)
+       VALUES ($1, $2, $3::jsonb)
+     ON CONFLICT (sensor_id, observed_at) DO UPDATE SET payload = EXCLUDED.payload`,
+    [req.params.id, observedAt.toISOString(), JSON.stringify(payload)]
+  )
+  res.json({ ok: true })
+})
+
+// Public view: only sensors the owner has explicitly marked public, with
+// the most recent reading attached. Useful for the public map.
+router.get('/sensors/community', async (_req, res) => {
+  const r = await query(
+    `SELECT s.id, s.label, s.kind, s.lat, s.lng,
+            r.observed_at AS last_observed_at, r.payload AS last_payload
+       FROM community_sensors s
+       LEFT JOIN LATERAL (
+         SELECT observed_at, payload FROM sensor_readings
+          WHERE sensor_id = s.id ORDER BY observed_at DESC LIMIT 1
+       ) r ON true
+      WHERE s.is_public = true AND s.consent_at IS NOT NULL
+      ORDER BY s.label ASC`)
+  res.json(r.rows)
+})
+
+router.get('/sensors/:id/history', async (req, res) => {
+  // History is public only for is_public sensors; private ones 404.
+  const meta = await query(
+    `SELECT id FROM community_sensors WHERE id = $1 AND is_public = true`,
+    [req.params.id]
+  )
+  if (!meta.rowCount) return res.status(404).json({ error: 'Sensor not found' })
+  const limit = Math.min(parseInt(req.query.limit, 10) || 500, 5000)
+  const r = await query(
+    `SELECT observed_at, payload FROM sensor_readings
+      WHERE sensor_id = $1 ORDER BY observed_at DESC LIMIT $2`,
+    [req.params.id, limit]
+  )
+  res.json(r.rows)
+})
+
+// --- Admin (env-promoted) ---------------------------------------------
+// Admins inherit every standard user capability (plan='admin' satisfies
+// limitsFor) and additionally get this backend-management surface.
+// Promotion happens via ADMIN_EMAILS at login — there is no shared
+// password. Every action runs under the operator's own Google identity
+// so sessions and audit trails remain attributable.
+
+const ALLOWED_PLANS = new Set(['free', 'member', 'pro', 'pro_plus', 'admin'])
+
+router.get('/admin/users', isAdmin, async (req, res) => {
+  const q = (req.query.q || '').toString().trim().toLowerCase()
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500)
+  const params = []
+  let where = ''
+  if (q) { params.push(`%${q}%`); where = `WHERE LOWER(email) LIKE $1 OR LOWER(COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) LIKE $1` }
+  params.push(limit)
+  const r = await query(
+    `SELECT id, email, first_name, last_name, plan, created_at, updated_at
+       FROM users ${where}
+       ORDER BY created_at DESC LIMIT $${params.length}`,
+    params
+  )
+  res.json(r.rows)
+})
+
+router.patch('/admin/users/:id/plan', isAdmin, async (req, res) => {
+  const { plan } = req.body || {}
+  if (!ALLOWED_PLANS.has(plan)) return res.status(400).json({ error: 'Invalid plan' })
+  await query('UPDATE users SET plan = $2, updated_at = now() WHERE id = $1', [req.params.id, plan])
+  res.json({ ok: true })
+})
+
+router.post('/admin/users/:id/revoke-sessions', isAdmin, async (req, res) => {
+  const r = await query(
+    `DELETE FROM sessions WHERE sess->'passport'->'user'->>'id' = $1`,
+    [req.params.id]
+  )
+  res.json({ revoked: r.rowCount })
+})
+
+router.get('/admin/stats', isAdmin, async (_req, res) => {
+  const [users, subs, ai, sensors] = await Promise.all([
+    query(`SELECT plan, COUNT(*)::int AS n FROM users GROUP BY plan`),
+    query(`SELECT COUNT(*)::int AS n FROM alert_subscriptions WHERE enabled`),
+    query(`SELECT COALESCE(SUM(request_count),0)::int AS n FROM ai_usage WHERE date = CURRENT_DATE`),
+    query(`SELECT COUNT(*)::int AS total,
+                  COUNT(*) FILTER (WHERE is_public)::int AS public
+             FROM community_sensors`),
+  ])
+  res.json({
+    users_by_plan: Object.fromEntries(users.rows.map(r => [r.plan, r.n])),
+    active_subscriptions: subs.rows[0]?.n ?? 0,
+    ai_calls_today: ai.rows[0]?.n ?? 0,
+    sensors: sensors.rows[0] ?? { total: 0, public: 0 },
+  })
 })
 
 // --- Stripe routes ----------------------------------------------------

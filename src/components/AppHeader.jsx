@@ -22,7 +22,7 @@ export default function AppHeader({ highestAlert, lastUpdate }) {
       <header className="app-header">
         <div className="app-header__top">
           <Link to="/" className="header-title app-header__brand">
-            <Activity size={28} color="#60a5fa" />
+            <Activity size={28} color="#2F6B86" />
             Track the Guad
           </Link>
 
