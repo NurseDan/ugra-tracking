@@ -163,9 +163,14 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* Footer */}
       <footer className="landing-footer">
-        <span>© {new Date().getFullYear()} Track the Guad</span>
+        <div className="landing-footer-links">
+          <span>© {new Date().getFullYear()} Track the Guad</span>
+          <span style={{ margin: '0 0.5rem', opacity: 0.5 }}>•</span>
+          <a className="landing-footer-link" href="/privacy">Privacy Policy</a>
+          <span style={{ margin: '0 0.5rem', opacity: 0.5 }}>•</span>
+          <a className="landing-footer-link" href="/terms">Terms of Service</a>
+        </div>
         <span>Data sourced from <a className="landing-footer-link" href="https://waterdata.usgs.gov" target="_blank" rel="noreferrer">USGS National Water Information System</a></span>
       </footer>
     </div>

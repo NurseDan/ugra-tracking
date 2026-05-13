@@ -120,6 +120,11 @@ export default function AccountSettings() {
         {tab === 'sensors' && <SensorsTab flash={flash} />}
         {tab === 'danger' && <DangerTab flash={flash} />}
       </div>
+
+      <div className="account__footer" style={{ marginTop: '2rem', textAlign: 'center', fontSize: '0.85rem', color: 'rgba(255,255,255,0.5)' }}>
+        <Link to="/privacy" style={{ color: 'inherit', textDecoration: 'none', marginRight: '1rem' }}>Privacy Policy</Link>
+        <Link to="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>Terms of Service</Link>
+      </div>
     </div>
   )
 }

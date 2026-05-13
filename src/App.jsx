@@ -20,6 +20,8 @@ import { SentinelProvider } from './contexts/SentinelContext'
 import Landing from './pages/Landing'
 import Admin from './pages/Admin'
 import { usePlan } from './hooks/usePlan'
+import PrivacyPolicy from './pages/PrivacyPolicy'
+import TermsOfService from './pages/TermsOfService'
 
 // Lazy-load secondary routes so the dashboard's first paint is unblocked
 // by code the user may never visit (account settings, plan pages, etc.).
@@ -106,7 +108,9 @@ async function backgroundGenerateForecasts(setCachedForecasts) {
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
     </AuthProvider>
   )
 }
@@ -122,11 +126,15 @@ function AppRoutes() {
     )
   }
 
-  if (!session) {
-    return <Landing />
-  }
-
-  return <AuthenticatedApp />
+  return (
+    <Routes>
+      <Route path="/privacy" element={<PrivacyPolicy />} />
+      <Route path="/terms" element={<TermsOfService />} />
+      <Route path="*" element={
+        !session ? <Landing /> : <AuthenticatedApp />
+      } />
+    </Routes>
+  )
 }
 
 function GatedRoute({ requiredPlan, featureName, children }) {
@@ -279,9 +287,8 @@ function AuthenticatedApp() {
 
   return (
     <SentinelProvider data={data} surgeEvents={surgeEvents} cachedForecasts={cachedForecasts}>
-      <BrowserRouter>
-        <AppHeader highestAlert={highestAlert} lastUpdate={lastUpdate} />
-        {(isOffline || fetchError) && (
+      <AppHeader highestAlert={highestAlert} lastUpdate={lastUpdate} />
+      {(isOffline || fetchError) && (
           <div className="error-banner">
             <WifiOff size={16} />
             {isOffline ? 'Offline — showing last cached river data' : 'Data refresh failed — displaying last known values'}
@@ -300,8 +307,8 @@ function AuthenticatedApp() {
           <Route path="/plans/:tier" element={<PlanDetail />} />
           <Route path="/admin" element={<Admin />} />
         </Routes>
-          </Suspense>
-      </BrowserRouter>
+      </Suspense>
+    </BrowserRouter>
     </SentinelProvider>
   )
 }

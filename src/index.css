@@ -1051,3 +1051,45 @@ body {
   .account__fields-row { grid-template-columns: 1fr; }
   .account__upgrade-cards { grid-template-columns: 1fr; }
 }
+
+
+.policy-container {
+  min-height: 100vh;
+  padding: 2rem;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.policy-nav {
+  margin-bottom: 2rem;
+}
+
+.policy-content {
+  padding: 2rem;
+  line-height: 1.6;
+}
+
+.policy-content h1 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  color: #fff;
+}
+
+.policy-content h2 {
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+  color: rgba(255,255,255,0.9);
+}
+
+.policy-content p, .policy-content ul {
+  color: rgba(255,255,255,0.7);
+  margin-bottom: 1rem;
+}
+
+.policy-content ul {
+  padding-left: 1.5rem;
+}
+
+.policy-content li {
+  margin-bottom: 0.5rem;
+}
