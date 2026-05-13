@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState, Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { GAUGES, REFRESH_MS, FAST_FLOW_MPH, FLOOD_FLOW_MPH, STALE_AFTER_MINUTES } from './config/gauges'
 import { fetchUSGSGauges } from './lib/usgs'
@@ -12,20 +12,27 @@ import { generateAllForecasts } from './lib/riseForecast'
 import { WifiOff } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import Dashboard from './pages/Dashboard'
-import GaugeDetail from './pages/GaugeDetail'
-import Incidents from './pages/Incidents'
-import MyAlerts from './pages/MyAlerts'
 import PublicDashboard from './pages/PublicDashboard'
 import { useNotifications } from './hooks/useNotifications'
-import Exports from './pages/Exports'
-import AccountSettings from './pages/AccountSettings'
-import Pricing from './pages/Pricing'
-import PlanDetail from './pages/PlanDetail'
 import AppHeader from './components/AppHeader'
 import UpgradeModal from './components/UpgradeModal'
 import { SentinelProvider } from './contexts/SentinelContext'
 import Landing from './pages/Landing'
 import { usePlan } from './hooks/usePlan'
+
+// Lazy-load secondary routes so the dashboard's first paint is unblocked
+// by code the user may never visit (account settings, plan pages, etc.).
+const GaugeDetail     = lazy(() => import('./pages/GaugeDetail'))
+const Incidents       = lazy(() => import('./pages/Incidents'))
+const MyAlerts        = lazy(() => import('./pages/MyAlerts'))
+const Exports         = lazy(() => import('./pages/Exports'))
+const AccountSettings = lazy(() => import('./pages/AccountSettings'))
+const Pricing         = lazy(() => import('./pages/Pricing'))
+const PlanDetail      = lazy(() => import('./pages/PlanDetail'))
+
+function RouteFallback() {
+  return <div className="loading-screen"><div className="loading-spinner" /></div>
+}
 
 function clamp(value, min, max) { return Math.max(min, Math.min(max, value)) }
 
@@ -280,16 +287,18 @@ function AuthenticatedApp() {
             {lastUpdate && <span style={{ marginLeft: 8, opacity: 0.7 }}>from {formatCDT(lastUpdate)}</span>}
           </div>
         )}
-        <Routes>
-          <Route path="/" element={<Dashboard data={data} lastUpdate={lastUpdate} />} />
-          <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
-          <Route path="/incidents" element={<Incidents />} />
-          <Route path="/my-alerts" element={<GatedRoute requiredPlan="member" featureName="Alert Subscriptions"><MyAlerts data={data} /></GatedRoute>} />
-          <Route path="/exports" element={<GatedRoute requiredPlan="pro_plus" featureName="Data Exports"><Exports data={data} /></GatedRoute>} />
-          <Route path="/account" element={<AccountSettings />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/plans/:tier" element={<PlanDetail />} />
-        </Routes>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/" element={<Dashboard data={data} lastUpdate={lastUpdate} />} />
+            <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
+            <Route path="/incidents" element={<Incidents />} />
+            <Route path="/my-alerts" element={<GatedRoute requiredPlan="member" featureName="Alert Subscriptions"><MyAlerts data={data} /></GatedRoute>} />
+            <Route path="/exports" element={<GatedRoute requiredPlan="pro_plus" featureName="Data Exports"><Exports data={data} /></GatedRoute>} />
+            <Route path="/account" element={<AccountSettings />} />
+            <Route path="/pricing" element={<Pricing />} />
+            <Route path="/plans/:tier" element={<PlanDetail />} />
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </SentinelProvider>
   )

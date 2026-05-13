@@ -1,7 +1,27 @@
 // Thin client wrapper around the server's /api/* endpoints.
 
-async function jsonFetch(url, init) {
-  const res = await fetch(url, { credentials: 'same-origin', ...init })
+// Read the server-issued CSRF cookie and mirror it into the request
+// header. The browser refuses to expose it to other origins thanks to
+// SameSite=Lax, so a cross-site attacker can't read or forge the token.
+function readCsrfCookie() {
+  if (typeof document === 'undefined') return null
+  for (const part of document.cookie.split(';')) {
+    const [k, ...rest] = part.trim().split('=')
+    if (k === 'csrf') return decodeURIComponent(rest.join('='))
+  }
+  return null
+}
+
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+async function jsonFetch(url, init = {}) {
+  const method = (init.method || 'GET').toUpperCase()
+  const headers = { ...(init.headers || {}) }
+  if (UNSAFE_METHODS.has(method)) {
+    const token = readCsrfCookie()
+    if (token) headers['X-CSRF-Token'] = token
+  }
+  const res = await fetch(url, { credentials: 'same-origin', ...init, headers })
   if (res.status === 401) throw new Error('401: Unauthorized')
   if (!res.ok) throw new Error(`${res.status}: ${await res.text().catch(() => '')}`)
   return res.json()

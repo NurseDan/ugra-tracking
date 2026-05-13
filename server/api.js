@@ -547,12 +547,40 @@ router.delete('/me/sensors/:id', isAuthenticated, async (req, res) => {
 // Reading ingest. Auth required; the sensor must belong to the caller.
 // The payload is opaque jsonb (height_ft, mm_per_hr, battery, etc.) so
 // hobbyist hardware can post whatever shape it has.
+//
+// A per-sensor token bucket caps ingest to ~12 readings/minute (one every
+// 5s on average, with a small burst). Honest devices stay well under;
+// misbehaving firmware can't fill the table or drown the disk.
+const SENSOR_BUCKETS = new Map()
+const SENSOR_BUCKET_CAP = 12
+const SENSOR_REFILL_PER_SEC = 12 / 60  // = 1 token every 5s
+
+function consumeSensorToken(sensorId) {
+  const now = Date.now()
+  let b = SENSOR_BUCKETS.get(sensorId)
+  if (!b) { b = { tokens: SENSOR_BUCKET_CAP, ts: now }; SENSOR_BUCKETS.set(sensorId, b) }
+  const elapsedSec = (now - b.ts) / 1000
+  b.tokens = Math.min(SENSOR_BUCKET_CAP, b.tokens + elapsedSec * SENSOR_REFILL_PER_SEC)
+  b.ts = now
+  if (b.tokens < 1) return false
+  b.tokens -= 1
+  return true
+}
+// Periodically prune buckets for sensors that haven't posted in 10 min so
+// the map can't grow unbounded across the lifetime of the process.
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60_000
+  for (const [id, b] of SENSOR_BUCKETS) if (b.ts < cutoff) SENSOR_BUCKETS.delete(id)
+}, 5 * 60_000).unref?.()
+
 router.post('/me/sensors/:id/readings', isAuthenticated, async (req, res) => {
   const own = await query(
     `SELECT id FROM community_sensors WHERE id = $1 AND user_id = $2`,
     [req.params.id, userId(req)]
   )
   if (!own.rowCount) return res.status(404).json({ error: 'Sensor not found' })
+  if (!consumeSensorToken(req.params.id))
+    return res.status(429).json({ error: 'Sensor reading rate limit (12/min) — slow your posts down.' })
   const payload = req.body?.payload
   if (!payload || typeof payload !== 'object' || Array.isArray(payload))
     return res.status(400).json({ error: 'payload object required' })
@@ -561,6 +589,11 @@ router.post('/me/sensors/:id/readings', isAuthenticated, async (req, res) => {
     return res.status(413).json({ error: 'payload too large (max 2 KB)' })
   const observedAt = req.body?.observed_at ? new Date(req.body.observed_at) : new Date()
   if (isNaN(observedAt)) return res.status(400).json({ error: 'invalid observed_at' })
+  // Reject readings dated in the future or absurdly far in the past
+  // so a misconfigured clock can't poison the time series.
+  const ageMs = Date.now() - observedAt.getTime()
+  if (ageMs < -5 * 60_000) return res.status(400).json({ error: 'observed_at is in the future' })
+  if (ageMs >  7 * 24 * 60 * 60_000) return res.status(400).json({ error: 'observed_at older than 7 days' })
   await query(
     `INSERT INTO sensor_readings (sensor_id, observed_at, payload)
        VALUES ($1, $2, $3::jsonb)

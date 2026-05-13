@@ -7,14 +7,57 @@ import { startPoller } from './server/poller.js'
 import { setupAuth } from './server/auth.js'
 import apiRouter from './server/api.js'
 import { callProvider, getUserLlmConfig, open as openSealed } from './server/llm.js'
+import { csrfMiddleware } from './server/csrf.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
 
+// --- Security headers --------------------------------------------------
+// Defense-in-depth headers that cost nothing to set. The CSP allows the
+// Google Fonts CDN (Inter + Fraunces) and the OAuth login pop-up, and
+// permits images from data: URIs (used by the inline hill silhouette and
+// Leaflet's marker tiles). connect-src is broad because the dashboard
+// reaches USGS / NWS / weather.gov / ahps over HTTPS at runtime.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('X-Frame-Options', 'DENY')
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
+  res.setHeader('Permissions-Policy', 'geolocation=(), microphone=(), camera=()')
+  res.setHeader(
+    'Strict-Transport-Security',
+    'max-age=31536000; includeSubDomains'
+  )
+  // CSP is intentionally not set on /api/* JSON responses — browsers only
+  // honour it on document loads. Setting it once on every response is
+  // harmless and protects the SPA when it's served from this same app.
+  res.setHeader(
+    'Content-Security-Policy',
+    [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "frame-ancestors 'none'",
+      "object-src 'none'",
+      "img-src 'self' data: https: blob:",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "script-src 'self'",
+      "connect-src 'self' https:",
+      "worker-src 'self' blob:",
+      "manifest-src 'self'",
+    ].join('; ')
+  )
+  next()
+})
+
 // Stripe webhook needs the raw body — register before express.json()
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }))
 app.use(express.json({ limit: '64kb' }))
+
+// CSRF (double-submit cookie). Mounted after express.json so we still
+// parse bodies for legitimate requests, but before any router that
+// would mutate state.
+app.use(csrfMiddleware)
 
 // --- Existing OpenAI proxy --------------------------------------------
 

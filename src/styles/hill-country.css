@@ -352,3 +352,52 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible,
   --alert-border: rgba(198,70,60,0.45);
   --alert-fg: var(--alert-red);
 }
+
+/* ── Reservoir card: warm the bright-blue gradients ───────────────── */
+
+.reservoir-card,
+.reservoir-card__panel {
+  background: var(--hc-paper);
+  border: 1px solid var(--hc-line);
+  color: var(--hc-ink);
+  box-shadow: var(--hc-shadow-sm);
+}
+/* Capacity / fill bars switch from cyan→violet to river teal→cedar */
+.reservoir-card__bar,
+.reservoir-card__fill,
+.reservoir-card .capacity-fill {
+  background: linear-gradient(90deg, var(--hc-river), var(--hc-cedar)) !important;
+}
+.reservoir-card__hero {
+  background: linear-gradient(160deg,
+    rgba(47,107,134,0.10) 0%,
+    rgba(92,126,90,0.06) 60%,
+    var(--hc-cream-deep) 100%) !important;
+  border: 1px solid var(--hc-line);
+}
+.reservoir-card__water,
+.reservoir-card__water-fill {
+  background: linear-gradient(to top, var(--hc-river-deep), var(--hc-river-bright)) !important;
+}
+
+/* ── Basin briefing + gauge briefing cards ───────────────────────── */
+
+.basin-briefing,
+.gauge-briefing,
+.gauge-briefing-card {
+  background: var(--hc-paper);
+  border: 1px solid var(--hc-line);
+  color: var(--hc-ink);
+  box-shadow: var(--hc-shadow-sm);
+}
+.basin-briefing__meta,
+.gauge-briefing__meta { color: var(--hc-bark); }
+
+/* ── Mobile responsive bumps for the new theme ───────────────────── */
+@media (max-width: 540px) {
+  .landing-hero { padding: 56px 18px 40px; }
+  .landing-hero__title { font-size: clamp(1.65rem, 7vw, 2.4rem); }
+  .landing-preview-grid { grid-template-columns: 1fr 1fr; }
+  .landing-features, .landing-stations, .landing-final-cta { padding-left: 18px; padding-right: 18px; }
+  body::after { height: 80px; opacity: 0.4; }
+}
