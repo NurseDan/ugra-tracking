@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { User, CreditCard, Bell, AlertTriangle, Zap, ExternalLink } from 'lucide-react'
+import { User, CreditCard, Bell, AlertTriangle, Zap, ExternalLink, Key, Radio } from 'lucide-react'
 import {
   getCurrentUser, getUsage, updateProfile, updatePreferences,
-  signOutEverywhere, deleteAccount, updateUserProfile, createCheckoutSession, createPortalSession
+  signOutEverywhere, deleteAccount, updateUserProfile, createCheckoutSession, createPortalSession,
+  getLlmKey, saveLlmKey, deleteLlmKey,
+  listMySensors, createSensor, deleteSensor,
 } from '../lib/api'
 import { PLAN_DETAILS, PLANS_ORDERED } from '../config/planDetails'
 import './AccountSettings.css'
@@ -12,6 +14,8 @@ const TABS = [
   { key: 'profile',  label: 'Profile',       icon: User },
   { key: 'plan',     label: 'Plan & usage',  icon: CreditCard },
   { key: 'notif',    label: 'Notifications', icon: Bell },
+  { key: 'ai',       label: 'AI key (BYOK)', icon: Key },
+  { key: 'sensors',  label: 'Community sensors', icon: Radio },
   { key: 'danger',   label: 'Danger zone',   icon: AlertTriangle, danger: true }
 ]
 
@@ -112,6 +116,8 @@ export default function AccountSettings() {
         {tab === 'profile' && <ProfileTab user={user} onSaved={refresh} flash={flash} />}
         {tab === 'plan' && <PlanTab user={user} usage={usage} flash={flash} />}
         {tab === 'notif' && <NotificationsTab user={user} onSaved={refresh} flash={flash} />}
+        {tab === 'ai' && <AiKeyTab flash={flash} />}
+        {tab === 'sensors' && <SensorsTab flash={flash} />}
         {tab === 'danger' && <DangerTab flash={flash} />}
       </div>
     </div>
@@ -245,7 +251,7 @@ function PlanTab({ user, usage, flash }) {
             {PLAN_LABELS[plan] || plan}
           </div>
           <div className="account__plan-meta">
-            {plan === 'free'     && 'View-only access · No alerts or AI'}
+            {plan === 'free'     && 'Free · Up to 5 alert subscriptions · Push alerts · BYOK AI'}
             {plan === 'member'   && 'Up to 5 alert subscriptions · Push alerts'}
             {plan === 'pro'      && 'Up to 15 subscriptions · Push, SMS, email · 20 AI calls/day'}
             {plan === 'pro_plus' && 'Unlimited subscriptions · All channels · Unlimited AI · Data exports'}
@@ -399,6 +405,242 @@ function NotificationsTab({ user, onSaved, flash }) {
           {saving ? 'Saving…' : 'Save preferences'}
         </button>
       </form>
+    </>
+  )
+}
+
+function AiKeyTab({ flash }) {
+  const [state, setState] = useState(null)
+  const [provider, setProvider] = useState('openai')
+  const [model, setModel] = useState('')
+  const [key, setKey] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function refresh() {
+    try { setState(await getLlmKey()) }
+    catch (err) { flash('err', err.message) }
+  }
+  useEffect(() => { refresh() }, [])
+
+  async function onSave(e) {
+    e.preventDefault()
+    if (!key.trim()) return flash('err', 'Paste an API key first.')
+    setBusy(true)
+    try {
+      await saveLlmKey({ provider, model: model.trim() || undefined, key: key.trim() })
+      setKey('')
+      flash('ok', 'API key saved. Your AI calls now bill to your provider directly.')
+      await refresh()
+    } catch (err) { flash('err', err.message) }
+    finally { setBusy(false) }
+  }
+
+  async function onRemove() {
+    if (!window.confirm('Remove your stored API key? AI calls will fall back to the server quota.')) return
+    setBusy(true)
+    try {
+      await deleteLlmKey()
+      flash('ok', 'API key removed.')
+      await refresh()
+    } catch (err) { flash('err', err.message) }
+    finally { setBusy(false) }
+  }
+
+  if (!state) return <div>Loading…</div>
+
+  const providers = state.providers || []
+  const current = providers.find(p => p.id === provider)
+
+  return (
+    <>
+      <h2 className="account__section-title">Bring your own AI key</h2>
+      <p className="account__section-desc">
+        Attach an API key from any supported LLM provider and your briefings will
+        bill directly to your account — no platform quotas, no hidden cost.
+        Keys are sealed with AES-256-GCM at rest and never returned to the browser.
+      </p>
+
+      <div className="account__card">
+        {state.configured ? (
+          <>
+            <div className="account__field">
+              <span className="account__field-label">Active key</span>
+              <span className="account__field-value">
+                {state.provider} · ends in ••••{state.last_four} · {state.model || 'default model'}
+              </span>
+            </div>
+            <button className="account__btn account__btn--ghost" onClick={onRemove} disabled={busy}>
+              Remove key
+            </button>
+            <hr style={{ margin: '16px 0', border: 0, borderTop: '1px solid #eee' }} />
+            <p className="account__section-desc">Replace it by entering a new key below.</p>
+          </>
+        ) : (
+          <p className="account__section-desc">
+            You haven't attached a key yet. Server-funded AI may be disabled on your plan;
+            paste a key from your favorite provider to enable AI briefings.
+          </p>
+        )}
+
+        <form onSubmit={onSave}>
+          <div className="account__field">
+            <label className="account__field-label" htmlFor="prov">Provider</label>
+            <select id="prov" className="account__input" value={provider}
+              onChange={e => { setProvider(e.target.value); setModel('') }}>
+              {providers.map(p => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="account__field">
+            <label className="account__field-label" htmlFor="mdl">Model (optional)</label>
+            <input id="mdl" className="account__input" value={model}
+              onChange={e => setModel(e.target.value)} maxLength={80}
+              placeholder={current?.defaultModel || ''} />
+            <span className="account__field-hint">
+              Leave blank to use the provider default. Smaller models keep token costs low.
+            </span>
+          </div>
+          <div className="account__field">
+            <label className="account__field-label" htmlFor="apikey">API key</label>
+            <input id="apikey" className="account__input" type="password" value={key}
+              onChange={e => setKey(e.target.value)} autoComplete="off"
+              placeholder="sk-..." />
+            <span className="account__field-hint">
+              Only the last four characters are kept for display.
+            </span>
+          </div>
+          <button type="submit" className="account__btn" disabled={busy || !key.trim()}>
+            {busy ? 'Saving…' : (state.configured ? 'Replace key' : 'Save key')}
+          </button>
+        </form>
+      </div>
+    </>
+  )
+}
+
+function SensorsTab({ flash }) {
+  const [sensors, setSensors] = useState(null)
+  const [label, setLabel] = useState('')
+  const [kind, setKind] = useState('water_level')
+  const [lat, setLat] = useState('')
+  const [lng, setLng] = useState('')
+  const [isPublic, setIsPublic] = useState(true)
+  const [consent, setConsent] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  async function refresh() {
+    try { setSensors(await listMySensors()) }
+    catch (err) { flash('err', err.message) }
+  }
+  useEffect(() => { refresh() }, [])
+
+  async function onAdd(e) {
+    e.preventDefault()
+    if (!consent) return flash('err', 'You must consent before publishing a sensor.')
+    setBusy(true)
+    try {
+      await createSensor({
+        label: label.trim(),
+        kind,
+        lat: Number(lat),
+        lng: Number(lng),
+        is_public: isPublic,
+        consent: true,
+      })
+      setLabel(''); setLat(''); setLng(''); setConsent(false)
+      flash('ok', 'Sensor registered.')
+      await refresh()
+    } catch (err) { flash('err', err.message) }
+    finally { setBusy(false) }
+  }
+
+  async function onDelete(id) {
+    if (!window.confirm('Remove this sensor and all of its readings?')) return
+    try {
+      await deleteSensor(id)
+      await refresh()
+    } catch (err) { flash('err', err.message) }
+  }
+
+  return (
+    <>
+      <h2 className="account__section-title">Community sensors</h2>
+      <p className="account__section-desc">
+        Hosting a private rain gauge or water-level sensor? Register it here to
+        contribute readings to the public map. Sharing is fully opt-in — toggle
+        a sensor private at any time and it disappears from the public view.
+        Ingest readings by POSTing to <code>/api/me/sensors/&lt;id&gt;/readings</code>.
+      </p>
+
+      <div className="account__card">
+        <form onSubmit={onAdd}>
+          <div className="account__field">
+            <label className="account__field-label" htmlFor="slabel">Label</label>
+            <input id="slabel" className="account__input" value={label}
+              onChange={e => setLabel(e.target.value)} maxLength={120}
+              placeholder="Back-pasture rain gauge" required />
+          </div>
+          <div className="account__fields-row">
+            <div className="account__field">
+              <label className="account__field-label" htmlFor="skind">Kind</label>
+              <select id="skind" className="account__input" value={kind}
+                onChange={e => setKind(e.target.value)}>
+                <option value="water_level">Water level</option>
+                <option value="rain">Rain</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div className="account__field">
+              <label className="account__field-label" htmlFor="slat">Latitude</label>
+              <input id="slat" className="account__input" value={lat}
+                onChange={e => setLat(e.target.value)} placeholder="30.0469" required />
+            </div>
+            <div className="account__field">
+              <label className="account__field-label" htmlFor="slng">Longitude</label>
+              <input id="slng" className="account__input" value={lng}
+                onChange={e => setLng(e.target.value)} placeholder="-99.1403" required />
+            </div>
+          </div>
+          <div className="account__field">
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input type="checkbox" checked={isPublic} onChange={e => setIsPublic(e.target.checked)} />
+              Publish readings on the public map
+            </label>
+          </div>
+          <div className="account__field">
+            <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)} />
+              <span>I confirm I own or operate this sensor and consent to sharing its
+                location and readings with the community. I understand I can delete
+                it at any time.</span>
+            </label>
+          </div>
+          <button type="submit" className="account__btn" disabled={busy || !consent}>
+            {busy ? 'Saving…' : 'Register sensor'}
+          </button>
+        </form>
+      </div>
+
+      <div className="account__card" style={{ marginTop: 16 }}>
+        <h3 style={{ marginTop: 0 }}>Your sensors</h3>
+        {sensors == null && <div>Loading…</div>}
+        {sensors && sensors.length === 0 && <p>None yet.</p>}
+        {sensors && sensors.map(s => (
+          <div key={s.id} className="account__danger-row">
+            <div className="account__danger-text">
+              <strong>{s.label}</strong>
+              <span>
+                {s.kind} · {Number(s.lat).toFixed(4)}, {Number(s.lng).toFixed(4)}
+                {' · '}{s.is_public ? 'public' : 'private'}
+              </span>
+            </div>
+            <button className="account__btn account__btn--ghost" onClick={() => onDelete(s.id)}>
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
     </>
   )
 }

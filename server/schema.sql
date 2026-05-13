@@ -179,3 +179,41 @@ CREATE TABLE IF NOT EXISTS vapid_keys (
   private_key text not null,
   subject     text not null
 );
+
+-- BYOK: encrypted per-user LLM API keys. The key is sealed with
+-- AES-256-GCM using LLM_KEY_SECRET (see server/llm.js). One row per user;
+-- swapping providers replaces the previous record.
+CREATE TABLE IF NOT EXISTS user_llm_keys (
+  user_id      text PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  provider     text NOT NULL,
+  model        text,
+  ciphertext   bytea NOT NULL,
+  iv           bytea NOT NULL,
+  last_four    text,
+  created_at   timestamptz DEFAULT now(),
+  updated_at   timestamptz DEFAULT now()
+);
+
+-- Opt-in community sensors. A row is only stored after the owner has
+-- affirmatively consented (consent_at IS NOT NULL); is_public controls
+-- whether the latest reading appears on the public map.
+CREATE TABLE IF NOT EXISTS community_sensors (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  label        text NOT NULL,
+  kind         text NOT NULL DEFAULT 'water_level',
+  lat          double precision NOT NULL,
+  lng          double precision NOT NULL,
+  is_public    boolean NOT NULL DEFAULT false,
+  consent_at   timestamptz,
+  created_at   timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_sensors_user ON community_sensors(user_id);
+CREATE INDEX IF NOT EXISTS idx_sensors_public ON community_sensors(is_public) WHERE is_public;
+
+CREATE TABLE IF NOT EXISTS sensor_readings (
+  sensor_id    uuid NOT NULL REFERENCES community_sensors(id) ON DELETE CASCADE,
+  observed_at  timestamptz NOT NULL DEFAULT now(),
+  payload      jsonb NOT NULL,
+  PRIMARY KEY (sensor_id, observed_at)
+);

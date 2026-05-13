@@ -1,7 +1,27 @@
 // Thin client wrapper around the server's /api/* endpoints.
 
-async function jsonFetch(url, init) {
-  const res = await fetch(url, { credentials: 'same-origin', ...init })
+// Read the server-issued CSRF cookie and mirror it into the request
+// header. The browser refuses to expose it to other origins thanks to
+// SameSite=Lax, so a cross-site attacker can't read or forge the token.
+function readCsrfCookie() {
+  if (typeof document === 'undefined') return null
+  for (const part of document.cookie.split(';')) {
+    const [k, ...rest] = part.trim().split('=')
+    if (k === 'csrf') return decodeURIComponent(rest.join('='))
+  }
+  return null
+}
+
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+async function jsonFetch(url, init = {}) {
+  const method = (init.method || 'GET').toUpperCase()
+  const headers = { ...(init.headers || {}) }
+  if (UNSAFE_METHODS.has(method)) {
+    const token = readCsrfCookie()
+    if (token) headers['X-CSRF-Token'] = token
+  }
+  const res = await fetch(url, { credentials: 'same-origin', ...init, headers })
   if (res.status === 401) throw new Error('401: Unauthorized')
   if (!res.ok) throw new Error(`${res.status}: ${await res.text().catch(() => '')}`)
   return res.json()
@@ -148,4 +168,42 @@ export async function adminPurgeAiCache() {
 
 export async function adminListNotifications(limit = 100) {
   return jsonFetch(`/api/admin/notifications?limit=${limit}`)
+// --- BYOK: user-managed LLM API key ----------------------------------
+
+export async function getLlmKey() {
+  return jsonFetch('/api/me/llm-key')
+}
+
+export async function saveLlmKey({ provider, model, key }) {
+  return jsonFetch('/api/me/llm-key', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ provider, model, key }),
+  })
+}
+
+export async function deleteLlmKey() {
+  return jsonFetch('/api/me/llm-key', { method: 'DELETE' })
+}
+
+// --- Community sensors -----------------------------------------------
+
+export async function listMySensors() {
+  return jsonFetch('/api/me/sensors')
+}
+
+export async function createSensor(body) {
+  return jsonFetch('/api/me/sensors', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteSensor(id) {
+  return jsonFetch(`/api/me/sensors/${id}`, { method: 'DELETE' })
+}
+
+export async function getCommunitySensors() {
+  return jsonFetch('/api/sensors/community')
 }
