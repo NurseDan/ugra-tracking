@@ -64,9 +64,20 @@ export async function setupAuth(app) {
       const normalizedEmail = email.toLowerCase().trim()
       
       // Check if user exists
-      const existing = await query('SELECT id FROM users WHERE email = $1', [normalizedEmail])
+      const existing = await query('SELECT id, password_hash FROM users WHERE email = $1', [normalizedEmail])
       if (existing.rows.length > 0) {
-        return res.status(409).json({ error: 'Account already exists for this email' })
+        if (existing.rows[0].password_hash) {
+          return res.status(409).json({ error: 'Account already exists for this email' })
+        } else {
+          // Allow setting a password for an existing OAuth account
+          const hash = await bcrypt.hash(password, 10)
+          await query(
+            `UPDATE users SET password_hash = $1, provider = 'local', first_name = COALESCE($2, first_name), last_name = COALESCE($3, last_name), updated_at = now() WHERE id = $4`,
+            [hash, first_name?.trim() || null, last_name?.trim() || null, existing.rows[0].id]
+          )
+          req.session.userId = existing.rows[0].id
+          return res.json({ ok: true, id: existing.rows[0].id })
+        }
       }
 
       const hash = await bcrypt.hash(password, 10)
@@ -102,7 +113,7 @@ export async function setupAuth(app) {
 
       const user = result.rows[0]
       if (!user.password_hash) {
-        return res.status(401).json({ error: 'Account was created with Google. Please reset password or register again.' })
+        return res.status(401).json({ error: 'Please sign up to set a password for this account.' })
       }
 
       const match = await bcrypt.compare(password, user.password_hash)
