@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS users (
   first_name    text,
   last_name     text,
   profile_image_url text,
-  provider      text not null default 'google',
+  password_hash text,
+  provider      text,
   provider_id   text,
   plan          text not null default 'free',
   plan_expires_at timestamptz,
@@ -18,7 +19,8 @@ CREATE TABLE IF NOT EXISTS users (
   updated_at    timestamptz default now()
 );
 -- Safe migrations for existing deployments
-ALTER TABLE users ADD COLUMN IF NOT EXISTS provider      text not null default 'google';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS provider      text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id   text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS plan          text not null default 'free';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at timestamptz;

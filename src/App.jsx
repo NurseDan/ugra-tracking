@@ -20,7 +20,8 @@ import Landing from './pages/Landing'
 import Admin from './pages/Admin'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import TermsOfService from './pages/TermsOfService'
-import OAuthConsent from './pages/OAuthConsent'
+import Login from './pages/Login'
+import Register from './pages/Register'
 
 // Lazy-load secondary routes so the dashboard's first paint is unblocked
 // by code the user may never visit (account settings, plan pages, etc.).
@@ -127,7 +128,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
-      <Route path="/oauth/consent" element={<OAuthConsent />} />
+      <Route path="/login" element={!session ? <Login /> : <AuthenticatedApp />} />
+      <Route path="/register" element={!session ? <Register /> : <AuthenticatedApp />} />
       <Route path="*" element={
         !session ? <Landing /> : <AuthenticatedApp />
       } />

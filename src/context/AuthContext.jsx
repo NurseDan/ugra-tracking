@@ -1,33 +1,51 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { getCurrentUser, login as apiLogin, register as apiRegister, logout as apiLogout } from '../lib/api'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [session, setSession] = useState(undefined) // undefined = loading
+  const [user, setUser] = useState(null)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session ?? null)
+    // Initial fetch to see if we have an active session
+    getCurrentUser().then(u => {
+      setUser(u)
+      setSession(u ? { active: true } : null)
+    }).catch(err => {
+      console.error('Failed to get current user:', err)
+      setUser(null)
+      setSession(null)
     })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session ?? null)
-    })
-
-    return () => subscription.unsubscribe()
   }, [])
 
-  const signInWithGoogle = () =>
-    supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: window.location.origin }
-    })
+  const login = async (email, password) => {
+    await apiLogin(email, password)
+    const u = await getCurrentUser()
+    setUser(u)
+    setSession(u ? { active: true } : null)
+  }
 
-  const signOut = () => supabase.auth.signOut()
+  const register = async (firstName, lastName, email, password) => {
+    await apiRegister(firstName, lastName, email, password)
+    const u = await getCurrentUser()
+    setUser(u)
+    setSession(u ? { active: true } : null)
+  }
+
+  const signOut = async () => {
+    try {
+      await apiLogout()
+    } finally {
+      setUser(null)
+      setSession(null)
+      // Hard refresh to clear all states and caches
+      window.location.href = '/'
+    }
+  }
 
   return (
-    <AuthContext.Provider value={{ session, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ session, user, login, register, signOut }}>
       {children}
     </AuthContext.Provider>
   )

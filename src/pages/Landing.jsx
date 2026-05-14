@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Activity, AlertTriangle, BarChart2, Map, RefreshCw, Zap, Shield, Bell } from 'lucide-react'
-import { useAuth } from '../context/AuthContext'
+
 
 const FEATURES = [
   {
@@ -70,14 +71,7 @@ function PreviewCard({ gauge }) {
 }
 
 export default function Landing() {
-  const { signInWithGoogle } = useAuth()
-  const [loading, setLoading] = useState(false)
-
-  const handleSignIn = async () => {
-    setLoading(true)
-    await signInWithGoogle()
-    setLoading(false)
-  }
+  const navigate = useNavigate()
 
   return (
     <div className="landing-root">
@@ -87,9 +81,14 @@ export default function Landing() {
           <Activity size={22} color="#2F6B86" />
           Track the Guad
         </div>
-        <button className="landing-btn landing-btn--outline" onClick={handleSignIn} disabled={loading}>
-          Sign in
-        </button>
+        <div className="landing-nav__actions">
+          <button className="landing-btn" style={{ background: 'transparent', color: '#111827', marginRight: '1rem', border: 'none' }} onClick={() => navigate('/login')}>
+            Sign in
+          </button>
+          <button className="landing-btn landing-btn--outline" onClick={() => navigate('/register')}>
+            Sign up
+          </button>
+        </div>
       </nav>
 
       {/* Hero */}
@@ -104,11 +103,10 @@ export default function Landing() {
           who calls the Hill Country home.
         </p>
         <div className="landing-hero__cta">
-          <button className="landing-btn landing-btn--primary landing-btn--lg" onClick={handleSignIn} disabled={loading}>
-            {loading ? <span className="landing-spinner" /> : <GoogleIcon />}
-            {loading ? 'Redirecting…' : 'Continue with Google'}
+          <button className="landing-btn landing-btn--primary landing-btn--lg" onClick={() => navigate('/register')}>
+            Get Started Free
           </button>
-          <span className="landing-hero__cta-sub">Free to use · No credit card</span>
+          <span className="landing-hero__cta-sub">No credit card required</span>
         </div>
 
         {/* Preview Cards */}
@@ -156,9 +154,8 @@ export default function Landing() {
         <div className="landing-final-cta__inner glass-panel">
           <h2 className="landing-final-cta__title">Ready to keep an eye on the river?</h2>
           <p className="landing-final-cta__sub">Sign in free for live readings, trend charts, push alerts, and — if you want it — your own AI key for unlimited briefings.</p>
-          <button className="landing-btn landing-btn--primary landing-btn--lg" onClick={handleSignIn} disabled={loading}>
-            {loading ? <span className="landing-spinner" /> : <GoogleIcon />}
-            {loading ? 'Redirecting…' : 'Continue with Google'}
+          <button className="landing-btn landing-btn--primary landing-btn--lg" onClick={() => navigate('/register')}>
+            Get Started Free
           </button>
         </div>
       </section>
@@ -177,13 +174,4 @@ export default function Landing() {
   )
 }
 
-function GoogleIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
-      <path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"/>
-      <path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332C2.438 15.983 5.482 18 9 18z"/>
-      <path fill="#FBBC05" d="M3.964 10.707c-.18-.54-.282-1.117-.282-1.707s.102-1.167.282-1.707V4.961H.957C.347 6.175 0 7.55 0 9s.348 2.825.957 4.039l3.007-2.332z"/>
-      <path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.438 2.017.957 4.961L3.964 7.293C4.672 5.166 6.656 3.58 9 3.58z"/>
-    </svg>
-  )
-}
+

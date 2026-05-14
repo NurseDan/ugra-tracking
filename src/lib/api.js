@@ -35,6 +35,26 @@ export async function getCurrentUser() {
   }
 }
 
+export async function login(email, password) {
+  return jsonFetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  })
+}
+
+export async function register(first_name, last_name, email, password) {
+  return jsonFetch('/api/auth/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ first_name, last_name, email, password })
+  })
+}
+
+export async function logout() {
+  return jsonFetch('/api/auth/logout', { method: 'POST' })
+}
+
 export async function listSubscriptions() {
   return jsonFetch('/api/me/subscriptions')
 }

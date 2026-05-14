@@ -14,18 +14,12 @@ const ALLOWED_CHANNELS = new Set(['push', 'email', 'sms', 'webhook'])
 const VALID_GAUGE_IDS = new Set(GAUGES.map(g => g.id))
 
 function userId(req) {
-  return req.user?.id ?? (req.user?.claims?.sub ? `google:${req.user.claims.sub}` : undefined)
+  return req.session?.userId
 }
 
 const ALLOWED_PLANS = new Set(['free', 'admin'])
 
-async function isAdmin(req, res, next) {
-  const uid = userId(req)
-  if (!uid) return res.status(401).json({ error: 'Unauthorized' })
-  const r = await query('SELECT plan FROM users WHERE id = $1', [uid])
-  if (r.rows[0]?.plan !== 'admin') return res.status(403).json({ error: 'Admin only' })
-  next()
-}
+
 
 // --- Read APIs ---------------------------------------------------------
 
@@ -414,10 +408,10 @@ router.patch('/me/preferences', isAuthenticated, async (req, res) => {
 router.post('/me/sign-out-everywhere', isAuthenticated, async (req, res) => {
   const uid = userId(req)
   await query(
-    `DELETE FROM sessions WHERE sess->'passport'->'user'->>'id' = $1`,
+    `DELETE FROM sessions WHERE sess->>'userId' = $1`,
     [uid]
   )
-  req.logout(() => res.json({ ok: true }))
+  req.session.destroy(() => res.json({ ok: true }))
 })
 
 router.delete('/me', isAuthenticated, async (req, res) => {
@@ -425,10 +419,10 @@ router.delete('/me', isAuthenticated, async (req, res) => {
   // Cascades to alert_subscriptions, ai_usage, notifications_sent.
   await query('DELETE FROM users WHERE id = $1', [uid])
   await query(
-    `DELETE FROM sessions WHERE sess->'passport'->'user'->>'id' = $1`,
+    `DELETE FROM sessions WHERE sess->>'userId' = $1`,
     [uid]
   )
-  req.logout(() => res.json({ ok: true }))
+  req.session.destroy(() => res.json({ ok: true }))
 })
 
 router.post('/me/test-alert', isAuthenticated, async (req, res) => {
