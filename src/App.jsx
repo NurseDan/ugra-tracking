@@ -15,13 +15,12 @@ import Dashboard from './pages/Dashboard'
 import PublicDashboard from './pages/PublicDashboard'
 import { useNotifications } from './hooks/useNotifications'
 import AppHeader from './components/AppHeader'
-import UpgradeModal from './components/UpgradeModal'
 import { SentinelProvider } from './contexts/SentinelContext'
 import Landing from './pages/Landing'
 import Admin from './pages/Admin'
-import { usePlan } from './hooks/usePlan'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import TermsOfService from './pages/TermsOfService'
+import OAuthConsent from './pages/OAuthConsent'
 
 // Lazy-load secondary routes so the dashboard's first paint is unblocked
 // by code the user may never visit (account settings, plan pages, etc.).
@@ -30,8 +29,6 @@ const Incidents       = lazy(() => import('./pages/Incidents'))
 const MyAlerts        = lazy(() => import('./pages/MyAlerts'))
 const Exports         = lazy(() => import('./pages/Exports'))
 const AccountSettings = lazy(() => import('./pages/AccountSettings'))
-const Pricing         = lazy(() => import('./pages/Pricing'))
-const PlanDetail      = lazy(() => import('./pages/PlanDetail'))
 
 function RouteFallback() {
   return <div className="loading-screen"><div className="loading-spinner" /></div>
@@ -130,44 +127,12 @@ function AppRoutes() {
     <Routes>
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
+      <Route path="/oauth/consent" element={<OAuthConsent />} />
       <Route path="*" element={
         !session ? <Landing /> : <AuthenticatedApp />
       } />
     </Routes>
   )
-}
-
-function GatedRoute({ requiredPlan, featureName, children }) {
-  const { canAlert, canExport, loading } = usePlan()
-  const [showModal, setShowModal] = useState(false)
-
-  const allowed =
-    requiredPlan === 'member'   ? canAlert :
-    requiredPlan === 'pro_plus' ? canExport :
-    true
-
-  useEffect(() => {
-    if (!loading && !allowed) setShowModal(true)
-  }, [loading, allowed])
-
-  if (loading) return null
-  if (!allowed) {
-    return (
-      <>
-        {showModal && (
-          <UpgradeModal
-            requiredPlan={requiredPlan}
-            featureName={featureName}
-            onClose={() => setShowModal(false)}
-          />
-        )}
-        <div style={{ filter: 'blur(4px)', pointerEvents: 'none', userSelect: 'none' }}>
-          {children}
-        </div>
-      </>
-    )
-  }
-  return children
 }
 
 function AuthenticatedApp() {
@@ -300,15 +265,12 @@ function AuthenticatedApp() {
           <Route path="/" element={<Dashboard data={data} lastUpdate={lastUpdate} />} />
           <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
           <Route path="/incidents" element={<Incidents />} />
-          <Route path="/my-alerts" element={<GatedRoute requiredPlan="member" featureName="Alert Subscriptions"><MyAlerts data={data} /></GatedRoute>} />
-          <Route path="/exports" element={<GatedRoute requiredPlan="pro_plus" featureName="Data Exports"><Exports data={data} /></GatedRoute>} />
+          <Route path="/my-alerts" element={<MyAlerts data={data} />} />
+          <Route path="/exports" element={<Exports data={data} />} />
           <Route path="/account" element={<AccountSettings />} />
-          <Route path="/pricing" element={<Pricing />} />
-          <Route path="/plans/:tier" element={<PlanDetail />} />
           <Route path="/admin" element={<Admin />} />
         </Routes>
       </Suspense>
-    </BrowserRouter>
     </SentinelProvider>
   )
 }

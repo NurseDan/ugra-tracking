@@ -7,19 +7,6 @@ import { validateWebhookUrl } from './webhooks.js'
 import { dispatchToSubscription } from './alertEngine.js'
 import { limitsFor } from './plans.js'
 import { PROVIDERS, isValidProvider, storeUserLlmKey, deleteUserLlmKey, getUserLlmConfig } from './llm.js'
-import Stripe from 'stripe'
-
-const stripe = process.env.STRIPE_SECRET_KEY ? new Stripe(process.env.STRIPE_SECRET_KEY) : null
-
-const PRICE_TO_PLAN = {
-  [process.env.STRIPE_PRICE_MEMBER]:        'member',
-  [process.env.STRIPE_PRICE_PRO]:           'pro',
-  [process.env.STRIPE_PRICE_PRO_PLUS]:      'pro_plus',
-  [process.env.STRIPE_PRICE_MEMBER_YEAR]:   'member',
-  [process.env.STRIPE_PRICE_PRO_YEAR]:      'pro',
-  [process.env.STRIPE_PRICE_PRO_PLUS_YEAR]: 'pro_plus',
-}
-
 const router = Router()
 
 const ALLOWED_LEVELS = new Set(['GREEN', 'YELLOW', 'ORANGE', 'RED', 'BLACK'])
@@ -30,7 +17,7 @@ function userId(req) {
   return req.user?.id ?? (req.user?.claims?.sub ? `google:${req.user.claims.sub}` : undefined)
 }
 
-const ALLOWED_PLANS = new Set(['free', 'member', 'pro', 'pro_plus', 'admin'])
+const ALLOWED_PLANS = new Set(['free', 'admin'])
 
 async function isAdmin(req, res, next) {
   const uid = userId(req)
@@ -652,7 +639,7 @@ router.get('/sensors/:id/history', async (req, res) => {
 // password. Every action runs under the operator's own Google identity
 // so sessions and audit trails remain attributable.
 
-const ALLOWED_PLANS = new Set(['free', 'member', 'pro', 'pro_plus', 'admin'])
+
 
 router.get('/admin/users', isAdmin, async (req, res) => {
   const q = (req.query.q || '').toString().trim().toLowerCase()
@@ -702,96 +689,6 @@ router.get('/admin/stats', isAdmin, async (_req, res) => {
   })
 })
 
-// --- Stripe routes ----------------------------------------------------
-
-router.post('/stripe/create-checkout-session', isAuthenticated, async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' })
-  const uid = userId(req)
-  if (!uid) return res.status(401).json({ error: 'Unauthorized' })
-  const { priceId } = req.body || {}
-  if (!priceId) return res.status(400).json({ error: 'priceId required' })
-
-  const userRow = await query('SELECT email, stripe_customer_id FROM users WHERE id = $1', [uid])
-  if (!userRow.rowCount) return res.status(404).json({ error: 'User not found' })
-  const { email, stripe_customer_id } = userRow.rows[0]
-
-  let customerId = stripe_customer_id
-  if (!customerId) {
-    const customer = await stripe.customers.create({ email, metadata: { user_id: uid } })
-    customerId = customer.id
-    await query('UPDATE users SET stripe_customer_id = $2 WHERE id = $1', [uid, customerId])
-  }
-
-  const PUBLIC_URL = process.env.PUBLIC_URL || 'http://localhost:5173'
-  const session = await stripe.checkout.sessions.create({
-    customer: customerId,
-    mode: 'subscription',
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${PUBLIC_URL}/account?upgraded=1`,
-    cancel_url: `${PUBLIC_URL}/pricing`,
-    metadata: { user_id: uid },
-  })
-  res.json({ url: session.url })
-})
-
-router.post('/stripe/portal', isAuthenticated, async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' })
-  const uid = userId(req)
-  if (!uid) return res.status(401).json({ error: 'Unauthorized' })
-
-  const userRow = await query('SELECT stripe_customer_id FROM users WHERE id = $1', [uid])
-  const customerId = userRow.rows[0]?.stripe_customer_id
-  if (!customerId) return res.status(400).json({ error: 'No Stripe customer found' })
-
-  const PUBLIC_URL = process.env.PUBLIC_URL || 'http://localhost:5173'
-  const portalSession = await stripe.billingPortal.sessions.create({
-    customer: customerId,
-    return_url: `${PUBLIC_URL}/account`,
-  })
-  res.json({ url: portalSession.url })
-})
-
-// Stripe webhook — raw body required; mount this before express.json() in server/index.js
-router.post('/stripe/webhook', async (req, res) => {
-  if (!stripe) return res.status(503).send('Stripe not configured')
-  const sig = req.headers['stripe-signature']
-  let event
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET)
-  } catch (err) {
-    return res.status(400).send(`Webhook error: ${err.message}`)
-  }
-
-  async function setPlan(customerId, priceId, subscriptionId) {
-    const plan = PRICE_TO_PLAN[priceId] || 'free'
-    await query(
-      `UPDATE users SET plan = $2, stripe_subscription_id = $3 WHERE stripe_customer_id = $1`,
-      [customerId, plan, subscriptionId]
-    )
-  }
-
-  if (event.type === 'checkout.session.completed') {
-    const session = event.data.object
-    if (session.mode === 'subscription') {
-      const sub = await stripe.subscriptions.retrieve(session.subscription)
-      const priceId = sub.items.data[0]?.price?.id
-      await setPlan(session.customer, priceId, sub.id)
-    }
-  } else if (event.type === 'customer.subscription.updated') {
-    const sub = event.data.object
-    const priceId = sub.items.data[0]?.price?.id
-    await setPlan(sub.customer, priceId, sub.id)
-  } else if (event.type === 'customer.subscription.deleted') {
-    const sub = event.data.object
-    await query(
-      `UPDATE users SET plan = 'free', stripe_subscription_id = NULL WHERE stripe_customer_id = $1`,
-      [sub.customer]
-    )
-  }
-
-  res.json({ received: true })
-})
-
 // --- Admin (plan = 'admin' only) --------------------------------------
 
 router.get('/admin/stats', isAuthenticated, isAdmin, async (_req, res) => {
@@ -826,7 +723,7 @@ router.get('/admin/users', isAuthenticated, isAdmin, async (req, res) => {
   }
   params.push(limit)
   const r = await query(
-    `SELECT id, email, first_name, last_name, plan, stripe_customer_id, created_at, updated_at
+    `SELECT id, email, first_name, last_name, plan, created_at, updated_at
        FROM users ${where}
        ORDER BY updated_at DESC NULLS LAST
        LIMIT $${params.length}`,

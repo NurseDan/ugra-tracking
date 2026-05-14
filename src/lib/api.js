@@ -109,17 +109,7 @@ export async function updateUserProfile(body) {
   })
 }
 
-export async function createCheckoutSession(priceId) {
-  return jsonFetch('/api/stripe/create-checkout-session', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ priceId }),
-  })
-}
 
-export async function createPortalSession() {
-  return jsonFetch('/api/stripe/portal', { method: 'POST' })
-}
 
 // --- Admin (plan = 'admin') -------------------------------------------
 
@@ -168,6 +158,8 @@ export async function adminPurgeAiCache() {
 
 export async function adminListNotifications(limit = 100) {
   return jsonFetch(`/api/admin/notifications?limit=${limit}`)
+}
+
 // --- BYOK: user-managed LLM API key ----------------------------------
 
 export async function getLlmKey() {

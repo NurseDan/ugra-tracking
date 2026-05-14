@@ -26,8 +26,6 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS default_email     text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS default_min_level text not null default 'ORANGE';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS default_channels  jsonb not null default '["push"]'::jsonb;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS phone             text;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id      text;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id  text;
 
 CREATE TABLE IF NOT EXISTS sessions (
   sid     varchar primary key,
@@ -217,3 +215,8 @@ CREATE TABLE IF NOT EXISTS sensor_readings (
   payload      jsonb NOT NULL,
   PRIMARY KEY (sensor_id, observed_at)
 );
+
+-- Clean up obsolete Stripe integrations and plans
+ALTER TABLE users DROP COLUMN IF EXISTS stripe_customer_id;
+ALTER TABLE users DROP COLUMN IF EXISTS stripe_subscription_id;
+UPDATE users SET plan = 'free' WHERE plan NOT IN ('free', 'admin');

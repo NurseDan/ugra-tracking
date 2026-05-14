@@ -14,7 +14,7 @@ import {
 } from '../lib/api'
 import { usePlan } from '../hooks/usePlan'
 
-const PLANS = ['free', 'member', 'pro', 'pro_plus', 'admin']
+const PLANS = ['free', 'admin']
 
 function fmtTime(t) {
   if (!t) return '—'
@@ -120,7 +120,7 @@ function Users() {
               <th style={{ padding: 6 }}>Email</th>
               <th style={{ padding: 6 }}>Name</th>
               <th style={{ padding: 6 }}>Plan</th>
-              <th style={{ padding: 6 }}>Stripe</th>
+
               <th style={{ padding: 6 }}>Updated</th>
             </tr>
           </thead>
@@ -138,9 +138,7 @@ function Users() {
                     {PLANS.map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </td>
-                <td style={{ padding: 6, fontFamily: 'monospace', fontSize: 11 }}>
-                  {u.stripe_customer_id || '—'}
-                </td>
+
                 <td style={{ padding: 6 }}>{fmtTime(u.updated_at)}</td>
               </tr>
             ))}
