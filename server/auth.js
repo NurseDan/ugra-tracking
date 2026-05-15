@@ -1,6 +1,6 @@
 import session from 'express-session'
 import connectPg from 'connect-pg-simple'
-import bcrypt from 'bcrypt'
+import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { query, pool } from './db.js'
 
