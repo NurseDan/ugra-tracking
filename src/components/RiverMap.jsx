@@ -29,7 +29,7 @@ function BoundsController() {
   useEffect(() => {
     const coords = GAUGES.map(g => [g.lat, g.lng])
     if (coords.length > 0) {
-      map.fitBounds(L.latLngBounds(coords), { padding: [40, 40] })
+      map.fitBounds(L.latLngBounds(coords), { padding: [40, 40], maxZoom: 10 })
     }
   }, [map])
   return null

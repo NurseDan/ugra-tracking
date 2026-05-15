@@ -253,7 +253,7 @@ function AuthenticatedApp() {
   const highestAlert = alertsArray.length > 0 ? getHighestAlert(alertsArray) : 'GREEN'
 
   return (
-    <SentinelProvider data={data} surgeEvents={surgeEvents} cachedForecasts={cachedForecasts}>
+    <SentinelProvider gaugesData={data} surgeEvents={surgeEvents} cachedForecasts={cachedForecasts}>
       <AppHeader highestAlert={highestAlert} lastUpdate={lastUpdate} />
       {(isOffline || fetchError) && (
           <div className="error-banner">
