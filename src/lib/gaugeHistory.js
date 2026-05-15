@@ -103,10 +103,11 @@ function dedupeAndTrim(points) {
 }
 
 export async function mergeHistory(siteId, newPoints) {
-  if (!siteId || !Array.isArray(newPoints) || newPoints.length === 0) return
+  if (!siteId || !Array.isArray(newPoints) || newPoints.length === 0) return []
   const existing = await readHistory(siteId)
   const merged = dedupeAndTrim([...existing, ...newPoints])
   await writeHistory(siteId, merged)
+  return merged
 }
 
 export async function getHistory(siteId) {
@@ -125,27 +126,24 @@ export function saveForecastCache(siteId, forecast) {
   } catch {}
 }
 
-export function loadForecastCache(siteId, { allowStale = false } = {}) {
+function readForecastEntry(siteId) {
   try {
-    const key = `sentinel_forecast_${siteId}`
-    const raw = localStorage.getItem(key)
-    if (!raw) return null
-    const { forecast, savedAt } = JSON.parse(raw)
-    if (!allowStale && Date.now() - savedAt > FORECAST_TTL_MS) return null
-    return forecast
+    const raw = localStorage.getItem(`sentinel_forecast_${siteId}`)
+    return raw ? JSON.parse(raw) : null
   } catch {
     return null
   }
 }
 
+export function loadForecastCache(siteId, { allowStale = false } = {}) {
+  const entry = readForecastEntry(siteId)
+  if (!entry) return null
+  if (!allowStale && Date.now() - entry.savedAt > FORECAST_TTL_MS) return null
+  return entry.forecast
+}
+
 export function isForecastStale(siteId) {
-  try {
-    const key = `sentinel_forecast_${siteId}`
-    const raw = localStorage.getItem(key)
-    if (!raw) return true
-    const { savedAt } = JSON.parse(raw)
-    return Date.now() - savedAt > FORECAST_TTL_MS
-  } catch {
-    return true
-  }
+  const entry = readForecastEntry(siteId)
+  if (!entry) return true
+  return Date.now() - entry.savedAt > FORECAST_TTL_MS
 }

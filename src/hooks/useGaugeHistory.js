@@ -29,8 +29,7 @@ export function useGaugeHistory(siteId) {
     try {
       const points = await fetchUSGS14DayHistory(siteId)
       if (points.length > 0) {
-        await mergeHistory(siteId, points)
-        const merged = await getHistory(siteId)
+        const merged = await mergeHistory(siteId, points)
         setHistory(merged)
         setLastFetched(new Date())
       } else if (cached.length === 0) {

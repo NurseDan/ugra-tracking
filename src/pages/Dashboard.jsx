@@ -10,6 +10,7 @@ import NwsAlertsBanner from '../components/NwsAlertsBanner'
 import BasinBriefingHeader from '../components/BasinBriefingHeader'
 import ReservoirCard from '../components/ReservoirCard'
 import AhpsForecastSummary from '../components/AhpsForecastSummary'
+import { categoryColor } from '../components/RiseForecastPanel'
 import { useSentinel } from '../contexts/SentinelContext'
 import { AlertTriangle, Clock, ShieldAlert, TrendingUp } from 'lucide-react'
 
@@ -72,15 +73,6 @@ function RiverCorridor({ gauges }) {
       <text x={W - 6} y={midY + 4} fill="#334155" fontSize={9} textAnchor="end" fontFamily="Inter,sans-serif">downstream ↓</text>
     </svg>
   )
-}
-
-function categoryColor(cat) {
-  if (!cat) return '#64748b'
-  if (cat.includes('Major')) return '#991b1b'
-  if (cat.includes('Moderate')) return '#ef4444'
-  if (cat.includes('Minor')) return '#f97316'
-  if (cat.includes('Action')) return '#f59e0b'
-  return '#10b981'
 }
 
 function Peak24hBadge({ forecast }) {

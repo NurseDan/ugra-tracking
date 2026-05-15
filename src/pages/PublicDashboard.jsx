@@ -2,11 +2,12 @@
 // Issues #1, #2, #4: Public-facing community flood awareness dashboard
 // Mobile-first, hero panel, gauge cards, map, incident log, disclaimers
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { GAUGES } from '../config/gauges'
 import { ALERT_LEVELS } from '../lib/alertEngine'
 import { formatCDT } from '../lib/formatTime'
 import { useSentinel } from '../contexts/SentinelContext'
+import { useAuth } from '../context/AuthContext'
 import RiverMap from '../components/RiverMap'
 import PublicDisclaimer from '../components/PublicDisclaimer'
 import { Clock, TrendingUp, Droplets, AlertTriangle } from 'lucide-react'
@@ -66,7 +67,7 @@ function HeroPanel({ status, lastUpdate }) {
   )
 }
 
-function GaugeCard({ gauge, data }) {
+function GaugeCard({ gauge, data, onGetAlerts }) {
   const alertColor = `var(--alert-${data?.alert?.toLowerCase() || 'green'})`
   const isStale = data?.isStale
 
@@ -154,15 +155,60 @@ function GaugeCard({ gauge, data }) {
         <Clock size={10} />
         {data?.time ? formatCDT(data.time) : '—'}
       </div>
+
+      <button
+        onClick={() => onGetAlerts(gauge.id, gauge.name)}
+        style={{ marginTop: '0.75rem', width: '100%', padding: '0.5rem', borderRadius: 8, background: 'rgba(47,107,134,0.15)', border: '1px solid rgba(47,107,134,0.4)', color: '#7eb8d0', fontSize: '0.8rem', cursor: 'pointer' }}
+      >
+        Get alerts →
+      </button>
     </div>
   )
 }
 
 export default function PublicDashboard() {
   const { gaugesData: data, lastUpdate, surgeEvents } = useSentinel()
+  const { register } = useAuth()
+  const navigate = useNavigate()
   const [showIncidents, setShowIncidents] = useState(false)
 
+  const [signupModal, setSignupModal] = useState(null) // null | { gaugeId, gaugeName }
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
   const status = getOverallStatus(data)
+
+  function openModal(gaugeId, gaugeName) {
+    setSignupModal({ gaugeId, gaugeName })
+    setEmail('')
+    setPassword('')
+    setError('')
+    setLoading(false)
+  }
+
+  function closeModal() {
+    setSignupModal(null)
+    setEmail('')
+    setPassword('')
+    setError('')
+    setLoading(false)
+  }
+
+  async function handleSignup(e) {
+    e.preventDefault()
+    setError('')
+    setLoading(true)
+    try {
+      await register('', '', email, password)
+      navigate('/my-alerts')
+    } catch (err) {
+      setError(err?.message || 'Registration failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '16px' }}>
@@ -204,7 +250,7 @@ export default function PublicDashboard() {
           Gauge Readings
         </h2>
         {GAUGES.map(g => (
-          <GaugeCard key={g.id} gauge={g} data={data[g.id]} />
+          <GaugeCard key={g.id} gauge={g} data={data[g.id]} onGetAlerts={openModal} />
         ))}
       </div>
 
@@ -224,6 +270,82 @@ export default function PublicDashboard() {
         <p style={{ margin: '4px 0' }}>Not affiliated with UGRA, NWS, or local emergency management</p>
         <p style={{ margin: '4px 0' }}>For official alerts: <a href="https://weather.gov" target="_blank" rel="noopener noreferrer" style={{ color: '#60a5fa' }}>weather.gov</a></p>
       </div>
+
+      {signupModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}
+          onClick={closeModal}
+        >
+          <div
+            style={{ background: 'rgba(15,23,42,0.97)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 16, padding: '2rem', width: '100%', maxWidth: 420, position: 'relative' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={closeModal}
+              style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: '#94a3b8', fontSize: '1.25rem', cursor: 'pointer' }}
+              aria-label="Close"
+            >
+              ×
+            </button>
+
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#f8fafc', margin: '0 0 1.25rem 0' }}>
+              Get alerts for {signupModal.gaugeName}
+            </h2>
+
+            <form onSubmit={handleSignup}>
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem' }}>
+                  Email
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#f8fafc', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem' }}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                  style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.05)', color: '#f8fafc', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+
+              {error && (
+                <div style={{ fontSize: '0.8rem', color: '#f87171', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 6, padding: '0.5rem 0.75rem', marginBottom: '0.75rem' }}>
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                style={{ width: '100%', padding: '0.75rem', borderRadius: 8, background: '#2F6B86', color: '#fff', border: 'none', fontWeight: 600, fontSize: '1rem', cursor: 'pointer', opacity: loading ? 0.6 : 1 }}
+              >
+                {loading ? 'Creating account…' : 'Create free account'}
+              </button>
+            </form>
+
+            <p style={{ textAlign: 'center', fontSize: '0.8rem', color: '#94a3b8', margin: '1rem 0 0 0' }}>
+              Already have an account?{' '}
+              <Link to="/login" style={{ color: '#7eb8d0', textDecoration: 'none' }}>
+                Sign in
+              </Link>
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -7,6 +7,7 @@ import {
   getLlmKey, saveLlmKey, deleteLlmKey,
   listMySensors, createSensor, deleteSensor,
 } from '../lib/api'
+import { ALERT_LEVELS } from '../lib/alertEngine'
 import './AccountSettings.css'
 
 const TABS = [
@@ -18,7 +19,7 @@ const TABS = [
   { key: 'danger',   label: 'Danger zone',   icon: AlertTriangle, danger: true }
 ]
 
-const LEVELS = ['YELLOW', 'ORANGE', 'RED', 'BLACK']
+const LEVELS = Object.keys(ALERT_LEVELS).filter(k => ALERT_LEVELS[k].priority >= 1)
 const ALL_CHANNELS = ['push', 'email', 'webhook', 'sms']
 
 

@@ -58,6 +58,8 @@ async function appendHistory(source, key, payload) {
 async function pollUSGS() {
   const ids = GAUGES.map(g => g.id)
   const data = await fetchUSGSCurrent(ids)
+  const prevResult = await query('SELECT gauge_id, alert_level FROM gauge_status WHERE gauge_id = ANY($1)', [ids])
+  const prevLevels = new Map(prevResult.rows.map(r => [r.gauge_id, r.alert_level]))
   for (const g of GAUGES) {
     const d = data[g.id]
     if (!d) continue
@@ -72,8 +74,7 @@ async function pollUSGS() {
     const level = getAlertLevel(rates, { isStale: stale })
     const payload = { ...d, rates, alert: level, isStale: stale }
 
-    const prev = await query('SELECT alert_level FROM gauge_status WHERE gauge_id = $1', [g.id])
-    const prevLevel = prev.rows[0]?.alert_level || 'GREEN'
+    const prevLevel = prevLevels.get(g.id) || 'GREEN'
 
     await query(
       `INSERT INTO gauge_status (gauge_id, height_ft, flow_cfs, observed_at, alert_level, rise_5m, rise_15m, rise_60m, is_stale, payload, updated_at)
@@ -131,9 +132,9 @@ async function cacheSource(key, fetcher, historySource = null, historyKey = '') 
 }
 
 async function pollWeather() {
-  for (const g of GAUGES) {
-    await cacheSource(`weather:${g.id}`, () => fetchOpenMeteoForecast(g.lat, g.lng), 'weather', g.id)
-  }
+  await Promise.all(GAUGES.map(g =>
+    cacheSource(`weather:${g.id}`, () => fetchOpenMeteoForecast(g.lat, g.lng), 'weather', g.id)
+  ))
   console.log('[poller] weather done')
 }
 
@@ -200,13 +201,11 @@ async function dispatchNwsAlert(alert) {
 }
 
 async function pollNws() {
-  await cacheSource('nws_alerts', async () => {
+  const cached = await cacheSource('nws_alerts', async () => {
     const alerts = await fetchNwsAlerts()
     return { alerts, fetchedAt: new Date().toISOString() }
   }, 'nws_alerts', '')
-  // Dispatch any new alerts to county subscribers.
-  const cur = await query(`SELECT payload FROM source_cache WHERE key = 'nws_alerts'`)
-  const alerts = cur.rows[0]?.payload?.alerts || []
+  const alerts = cached?.alerts || []
   // Trim the in-memory dedup set when alerts expire — keep it bounded.
   const liveIds = new Set(alerts.map(a => a.id))
   for (const id of nwsDispatchedAlerts) {
@@ -220,18 +219,20 @@ async function pollNws() {
 }
 
 async function pollAhps() {
-  for (const [siteId, lid] of Object.entries(AHPS_LIDS)) {
-    if (!lid) continue
-    await cacheSource(`ahps:${siteId}`, () => fetchAhps(lid), 'ahps', siteId)
-  }
+  await Promise.all(
+    Object.entries(AHPS_LIDS)
+      .filter(([, lid]) => lid)
+      .map(([siteId, lid]) => cacheSource(`ahps:${siteId}`, () => fetchAhps(lid), 'ahps', siteId))
+  )
   console.log('[poller] ahps done')
 }
 
 async function pollNwm() {
-  for (const [siteId, reach] of Object.entries(NWM_REACHES)) {
-    if (!reach) continue
-    await cacheSource(`nwm:${siteId}`, () => fetchNwm(reach), 'nwm', siteId)
-  }
+  await Promise.all(
+    Object.entries(NWM_REACHES)
+      .filter(([, reach]) => reach)
+      .map(([siteId, reach]) => cacheSource(`nwm:${siteId}`, () => fetchNwm(reach), 'nwm', siteId))
+  )
   console.log('[poller] nwm done')
 }
 

@@ -4,8 +4,6 @@ import { useAuth } from '../context/AuthContext'
 import { Activity } from 'lucide-react'
 
 export default function Register() {
-  const [firstName, setFirstName] = useState('')
-  const [lastName, setLastName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -18,7 +16,7 @@ export default function Register() {
     setError('')
     setLoading(true)
     try {
-      await register(firstName, lastName, email, password)
+      await register('', '', email, password)
       navigate('/my-alerts')
     } catch (err) {
       setError(err.message || 'Failed to create account')
@@ -42,29 +40,6 @@ export default function Register() {
         {error && <div style={{ background: '#FEE2E2', color: '#B91C1C', padding: '0.75rem', borderRadius: '6px', marginBottom: '1rem', fontSize: '0.875rem' }}>{error}</div>}
         
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div style={{ display: 'flex', gap: '1rem' }}>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#374151', marginBottom: '0.5rem' }}>First name</label>
-              <input 
-                type="text" 
-                value={firstName} 
-                onChange={e => setFirstName(e.target.value)} 
-                required 
-                style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #D1D5DB', borderRadius: '6px', outline: 'none' }} 
-              />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#374151', marginBottom: '0.5rem' }}>Last name</label>
-              <input 
-                type="text" 
-                value={lastName} 
-                onChange={e => setLastName(e.target.value)} 
-                required 
-                style={{ width: '100%', padding: '0.5rem 0.75rem', border: '1px solid #D1D5DB', borderRadius: '6px', outline: 'none' }} 
-              />
-            </div>
-          </div>
-
           <div>
             <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: '#374151', marginBottom: '0.5rem' }}>Email address</label>
             <input 
