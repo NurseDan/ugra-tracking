@@ -193,9 +193,6 @@ app.post('/api/chat', async (req, res) => {
       return res.status(429).json({ error: `Daily AI limit reached (${limits.aiCallsPerDay}). Add your own API key for unlimited use.` })
   }
 
-  const cleanSystem = sanitize(system)
-  const cleanUser   = sanitize(user)
-
   // Server-side cache: identical (model, system, user, schema) within the
   // TTL window returns the saved completion without spending OpenAI tokens.
   await pruneAiCache()
