@@ -60,17 +60,17 @@ function RiverCorridor({ gauges }) {
             <text x={x} y={midY - 22} fill="#f8fafc" fontSize={12} textAnchor="middle" fontWeight="700" fontFamily="Inter,sans-serif">
               {ht != null ? ht.toFixed(1) + "'" : '—'}
             </text>
-            <text x={x} y={midY - 10} fill={color} fontSize={9} textAnchor="middle" fontFamily="Inter,sans-serif">
+            <text x={x} y={midY - 10} fill={color} fontSize={11} textAnchor="middle" fontFamily="Inter,sans-serif">
               {rateStr}
             </text>
-            <text x={x} y={midY + 25} fill="#64748b" fontSize={9} textAnchor="middle" fontFamily="Inter,sans-serif">
+            <text x={x} y={midY + 25} fill="#64748b" fontSize={11} textAnchor="middle" fontFamily="Inter,sans-serif">
               {g.shortName}
             </text>
           </g>
         )
       })}
-      <text x={6} y={midY + 4} fill="#334155" fontSize={9} fontFamily="Inter,sans-serif">↑ upstream</text>
-      <text x={W - 6} y={midY + 4} fill="#334155" fontSize={9} textAnchor="end" fontFamily="Inter,sans-serif">downstream ↓</text>
+      <text x={6} y={midY + 4} fill="#334155" fontSize={11} fontFamily="Inter,sans-serif">↑ upstream</text>
+      <text x={W - 6} y={midY + 4} fill="#334155" fontSize={11} textAnchor="end" fontFamily="Inter,sans-serif">downstream ↓</text>
     </svg>
   )
 }
@@ -197,7 +197,7 @@ export default function Dashboard({ forecasts = {} }) {
                 )}
 
                 <div style={{ marginBottom: 10 }}>
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Sentinel Monitoring</div>
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>Sentinel Monitoring</div>
                   <div style={{ fontWeight: 700, color: '#60a5fa' }}>
                     {d?.sentinelLevel || '—'} ({d?.sentinelScore ?? 0})
                   </div>
@@ -237,9 +237,9 @@ export default function Dashboard({ forecasts = {} }) {
 
                 {floodPct !== null && (
                   <div style={{ marginBottom: 12 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#64748b', marginBottom: 4 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: '#94a3b8', marginBottom: 4 }}>
                       <span>Flood stage progress</span>
-                      <span style={{ color: floodPct > 85 ? 'var(--alert-red)' : floodPct > 65 ? 'var(--alert-orange)' : '#64748b' }}>
+                      <span style={{ color: floodPct > 85 ? 'var(--alert-red)' : floodPct > 65 ? 'var(--alert-orange)' : '#94a3b8' }}>
                         {floodPct.toFixed(0)}% ({g.floodStageFt} ft)
                       </span>
                     </div>

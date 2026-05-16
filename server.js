@@ -181,7 +181,7 @@ app.post('/api/chat', async (req, res) => {
   }
   const limits = limitsFor(plan)
   if (limits.aiCallsPerDay === 0)
-    return res.status(402).json({ error: 'Server-funded AI is disabled on your plan. Add your own API key under Account → AI Key for unlimited use.' })
+    return res.status(402).json({ error: 'AI briefings require a Pro subscription or your own API key. Upgrade to Pro under Account Settings, or add your own OpenAI/Anthropic key under Account → AI Key.' })
   if (userId && limits.aiCallsPerDay !== Infinity) {
     const { query: dbQuery } = await import('./server/db.js')
     const usageRow = await dbQuery(
