@@ -134,7 +134,7 @@ app.post('/api/chat', async (req, res) => {
 
   // Identify the caller (may be unauthenticated for the public proxy path).
   const sub = req.user?.claims?.sub
-  const userId = req.user?.id ?? (sub ? `google:${sub}` : null)
+  const userId = req.user?.id ?? (sub ? `google:${sub}` : null) ?? req.session?.userId ?? null
 
   // 1) Prefer the user's own stored API key (BYOK). No plan check, no quota,
   //    no usage accounting — they're paying their provider directly.
