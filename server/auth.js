@@ -4,6 +4,15 @@ import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { query, pool } from './db.js'
 
+const ADMIN_EMAILS = new Set(
+  (process.env.ADMIN_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean)
+)
+
+async function maybePromoteAdmin(userId, email) {
+  if (!ADMIN_EMAILS.has(email.toLowerCase())) return
+  await query(`UPDATE users SET plan = 'admin', updated_at = now() WHERE id = $1 AND plan != 'admin'`, [userId])
+}
+
 // 7-day session lifetime; we only push the expiration forward once it has
 // burned through more than half its window. That cuts the per-request
 // session-row UPDATE that connect-pg-simple does by default (every API
@@ -76,6 +85,7 @@ export async function setupAuth(app) {
             [hash, first_name?.trim() || null, last_name?.trim() || null, existing.rows[0].id]
           )
           req.session.userId = existing.rows[0].id
+          await maybePromoteAdmin(existing.rows[0].id, normalizedEmail)
           return res.json({ ok: true, id: existing.rows[0].id })
         }
       }
@@ -90,6 +100,7 @@ export async function setupAuth(app) {
       )
 
       req.session.userId = id
+      await maybePromoteAdmin(id, normalizedEmail)
       res.json({ ok: true, id })
     } catch (err) {
       console.error('Registration error:', err)
@@ -122,6 +133,7 @@ export async function setupAuth(app) {
       }
 
       req.session.userId = user.id
+      await maybePromoteAdmin(user.id, normalizedEmail)
       res.json({ ok: true })
     } catch (err) {
       console.error('Login error:', err)
