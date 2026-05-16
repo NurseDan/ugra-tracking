@@ -8,7 +8,7 @@ export const PLAN_LIMITS = {
   pro: {
     maxSubscriptions: Infinity,
     allowedChannels: ['push', 'email', 'sms', 'webhook'],
-    aiCallsPerDay: 50,       // server-funded, 50 calls/day
+    aiCallsPerDay: 8,        // server-funded, 8 calls/day
     canExport: true,
   },
   admin: {

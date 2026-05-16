@@ -7,6 +7,7 @@ import { validateWebhookUrl } from './webhooks.js'
 import { dispatchToSubscription } from './alertEngine.js'
 import { limitsFor } from './plans.js'
 import { PROVIDERS, isValidProvider, storeUserLlmKey, deleteUserLlmKey, getUserLlmConfig } from './llm.js'
+import { createCheckoutSession, createPortalSession } from './stripe.js'
 const router = Router()
 
 const ALLOWED_LEVELS = new Set(['GREEN', 'YELLOW', 'ORANGE', 'RED', 'BLACK'])
@@ -746,6 +747,29 @@ router.get('/admin/notifications', isAuthenticated, isAdmin, async (req, res) =>
     `SELECT id, subscription_id, incident_id, channel, status, error, sent_at
        FROM notifications_sent ORDER BY sent_at DESC LIMIT $1`, [limit])
   res.json(r.rows)
+})
+
+// Stripe checkout — create a hosted payment session
+router.post('/stripe/checkout', isAuthenticated, async (req, res) => {
+  try {
+    const user = await query('SELECT email FROM users WHERE id=$1', [req.session.userId])
+    const origin = `${req.protocol}://${req.get('host')}`
+    const url = await createCheckoutSession(req.session.userId, user.rows[0].email, origin)
+    res.json({ url })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Stripe customer portal — manage/cancel subscription
+router.post('/stripe/portal', isAuthenticated, async (req, res) => {
+  try {
+    const origin = `${req.protocol}://${req.get('host')}`
+    const url = await createPortalSession(req.session.userId, origin)
+    res.json({ url })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
 })
 
 export default router

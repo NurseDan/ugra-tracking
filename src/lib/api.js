@@ -219,3 +219,10 @@ export async function deleteSensor(id) {
 export async function getCommunitySensors() {
   return jsonFetch('/api/sensors/community')
 }
+
+export async function createStripeCheckout() {
+  return jsonFetch('/api/stripe/checkout', { method: 'POST' })
+}
+export async function createStripePortal() {
+  return jsonFetch('/api/stripe/portal', { method: 'POST' })
+}

@@ -6,6 +6,7 @@ import {
   signOutEverywhere, deleteAccount, updateUserProfile,
   getLlmKey, saveLlmKey, deleteLlmKey,
   listMySensors, createSensor, deleteSensor,
+  createStripeCheckout, createStripePortal,
 } from '../lib/api'
 import { ALERT_LEVELS } from '../lib/alertEngine'
 import './AccountSettings.css'
@@ -16,6 +17,7 @@ const TABS = [
   { key: 'notif',    label: 'Notifications', icon: Bell },
   { key: 'ai',       label: 'AI key (BYOK)', icon: Key },
   { key: 'sensors',  label: 'Community sensors', icon: Radio },
+  { key: 'plan',     label: 'Plan',             icon: Zap },
   { key: 'danger',   label: 'Danger zone',   icon: AlertTriangle, danger: true }
 ]
 
@@ -36,6 +38,8 @@ export default function AccountSettings() {
   const [usage, setUsage] = useState(null)
   const [tab, setTab] = useState('profile')
   const [msg, setMsg] = useState(null)
+
+  const upgraded = new URLSearchParams(window.location.search).get('upgraded') === '1'
 
   async function refresh() {
     const u = await getCurrentUser()
@@ -70,6 +74,12 @@ export default function AccountSettings() {
     <div className="account">
       <h1 className="account__title">Account Settings</h1>
 
+      {upgraded && (
+        <div style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', borderRadius: 10, padding: '12px 20px', marginBottom: 20, color: '#10b981', fontWeight: 600 }}>
+          You're now on Pro! Welcome aboard.
+        </div>
+      )}
+
       <nav className="account__nav" aria-label="Settings sections">
         {TABS.map(t => {
           const Icon = t.icon
@@ -98,6 +108,7 @@ export default function AccountSettings() {
         {tab === 'notif' && <NotificationsTab user={user} onSaved={refresh} flash={flash} />}
         {tab === 'ai' && <AiKeyTab flash={flash} />}
         {tab === 'sensors' && <SensorsTab flash={flash} />}
+        {tab === 'plan' && <PlanTab user={user} />}
         {tab === 'danger' && <DangerTab flash={flash} />}
       </div>
 
@@ -105,6 +116,77 @@ export default function AccountSettings() {
         <Link to="/privacy" style={{ color: 'inherit', textDecoration: 'none', marginRight: '1rem' }}>Privacy Policy</Link>
         <Link to="/terms" style={{ color: 'inherit', textDecoration: 'none' }}>Terms of Service</Link>
       </div>
+    </div>
+  )
+}
+
+function PlanTab({ user }) {
+  const isPro = user?.plan === 'pro' || user?.plan === 'admin'
+  const [loading, setLoading] = useState(false)
+  const [err, setErr] = useState(null)
+
+  async function handleUpgrade() {
+    setLoading(true); setErr(null)
+    try {
+      const { url } = await createStripeCheckout()
+      window.location.href = url
+    } catch (e) { setErr(e.message) } finally { setLoading(false) }
+  }
+
+  async function handleManage() {
+    setLoading(true); setErr(null)
+    try {
+      const { url } = await createStripePortal()
+      window.location.href = url
+    } catch (e) { setErr(e.message) } finally { setLoading(false) }
+  }
+
+  return (
+    <div>
+      <h2 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: 20 }}>Subscription</h2>
+
+      <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '20px 24px', marginBottom: 20 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '1rem', marginBottom: 4 }}>
+              {isPro ? 'Pro Plan' : 'Free Plan'}
+            </div>
+            <div style={{ fontSize: '0.85rem', color: '#94a3b8' }}>
+              {isPro
+                ? 'Up to 8 AI briefings/day · Text alerts · Full export'
+                : 'Bring your own API key · Push alerts · Basic access'}
+            </div>
+          </div>
+          <span style={{ padding: '4px 14px', borderRadius: 999, fontSize: '0.8rem', fontWeight: 700, background: isPro ? 'rgba(16,185,129,0.15)' : 'rgba(148,163,184,0.1)', color: isPro ? '#10b981' : '#94a3b8', border: `1px solid ${isPro ? 'rgba(16,185,129,0.3)' : 'rgba(148,163,184,0.2)'}` }}>
+            {isPro ? 'Active' : 'Free'}
+          </span>
+        </div>
+      </div>
+
+      {!isPro && (
+        <div style={{ background: 'rgba(47,107,134,0.08)', border: '1px solid rgba(47,107,134,0.25)', borderRadius: 12, padding: '20px 24px', marginBottom: 20 }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Upgrade to Pro — $5/month</div>
+          <ul style={{ color: '#94a3b8', fontSize: '0.875rem', paddingLeft: 18, marginBottom: 16, lineHeight: 1.8 }}>
+            <li>8 server-funded AI briefings per day</li>
+            <li>SMS / text flood alerts</li>
+            <li>Full data export</li>
+            <li>Cancel anytime</li>
+          </ul>
+          {err && <div style={{ color: '#f87171', fontSize: '0.85rem', marginBottom: 12 }}>{err}</div>}
+          <button className="account__btn" onClick={handleUpgrade} disabled={loading} style={{ opacity: loading ? 0.6 : 1 }}>
+            {loading ? 'Redirecting…' : 'Upgrade to Pro — $5/mo'}
+          </button>
+        </div>
+      )}
+
+      {isPro && user?.plan !== 'admin' && (
+        <div>
+          {err && <div style={{ color: '#f87171', fontSize: '0.85rem', marginBottom: 12 }}>{err}</div>}
+          <button className="account__btn--ghost" onClick={handleManage} disabled={loading}>
+            {loading ? 'Redirecting…' : 'Manage subscription'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

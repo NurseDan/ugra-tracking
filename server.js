@@ -8,6 +8,7 @@ import { startPoller } from './server/poller.js'
 import { setupAuth } from './server/auth.js'
 import apiRouter from './server/api.js'
 import { callProvider, getUserLlmConfig, open as openSealed } from './server/llm.js'
+import { handleStripeWebhook } from './server/stripe.js'
 import { csrfMiddleware } from './server/csrf.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -291,6 +292,17 @@ async function main() {
     app.get('/api/auth/user', (_req, res) => res.status(401).json({ message: 'Auth not configured' }))
     app.get('/api/login', (_req, res) => res.status(503).send('Auth not configured on this deployment'))
   }
+
+  app.post('/api/stripe/webhook', async (req, res) => {
+    const sig = req.headers['stripe-signature']
+    try {
+      await handleStripeWebhook(req.body, sig)
+      res.json({ received: true })
+    } catch (err) {
+      console.error('[stripe webhook]', err.message)
+      res.status(400).json({ error: err.message })
+    }
+  })
 
   app.use('/api', apiRouter)
 
