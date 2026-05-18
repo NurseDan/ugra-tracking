@@ -221,4 +221,3 @@ CREATE TABLE IF NOT EXISTS sensor_readings (
 -- Clean up obsolete Stripe integrations and plans
 ALTER TABLE users DROP COLUMN IF EXISTS stripe_customer_id;
 ALTER TABLE users DROP COLUMN IF EXISTS stripe_subscription_id;
-UPDATE users SET plan = 'free' WHERE plan NOT IN ('free', 'admin');
