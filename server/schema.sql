@@ -218,6 +218,7 @@ CREATE TABLE IF NOT EXISTS sensor_readings (
   PRIMARY KEY (sensor_id, observed_at)
 );
 
--- Clean up obsolete Stripe integrations (Stripe columns are dropped but existing user plans are preserved)
-ALTER TABLE users DROP COLUMN IF EXISTS stripe_customer_id;
-ALTER TABLE users DROP COLUMN IF EXISTS stripe_subscription_id;
+-- Stripe billing columns used by server/stripe.js. Keep these additive and
+-- idempotent so schema initialization never erases subscription linkage data.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id text;

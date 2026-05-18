@@ -71,7 +71,7 @@ During emergencies, follow official guidance and move to higher ground if condit
 - **Database**: PostgreSQL
 - **Auth**: Google OAuth (Passport.js)
 - **Notifications**: Web Push API + Nodemailer
-- **Deployment**: Railway
+- **Deployment**: Portable Node hosting (Railway, Cloud Run, App Runner, Render, Fly.io)
 
 ## Development
 
@@ -91,7 +91,7 @@ npm test
 
 ## Environment Variables
 
-See `.env.example` for required configuration.
+See `.env.example` for local placeholders and `DEPLOY.md` for the portable production deployment contract. `.env` is for local development only; production secrets should live in your host's environment-variable or secret-manager settings.
 
 ## Roadmap
 

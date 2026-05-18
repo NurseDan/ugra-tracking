@@ -15,6 +15,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
 
+// Lightweight liveness probe for cloud hosts. Intentionally does not touch
+// the database so it can report process health independently of dependencies.
+app.get('/health', (_req, res) => res.json({ ok: true }))
+
 // --- Security headers --------------------------------------------------
 // Defense-in-depth headers that cost nothing to set. The CSP allows the
 // Google Fonts CDN (Inter + Fraunces) and the OAuth login pop-up, and
