@@ -42,7 +42,7 @@ SMTP_FROM=alerts@yourdomain.com
 
 ## Database migration
 
-The schema is idempotent — run it on every boot or manually:
+The schema is idempotent and runs automatically on startup if the `DATABASE_URL` environment variable is set. You can also run it manually:
 
 ```bash
 psql "$DATABASE_URL" -f server/schema.sql

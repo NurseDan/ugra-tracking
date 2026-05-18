@@ -218,6 +218,6 @@ CREATE TABLE IF NOT EXISTS sensor_readings (
   PRIMARY KEY (sensor_id, observed_at)
 );
 
--- Clean up obsolete Stripe integrations and plans
+-- Clean up obsolete Stripe integrations (Stripe columns are dropped but existing user plans are preserved)
 ALTER TABLE users DROP COLUMN IF EXISTS stripe_customer_id;
 ALTER TABLE users DROP COLUMN IF EXISTS stripe_subscription_id;
