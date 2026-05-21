@@ -10,6 +10,7 @@ import AhpsForecastChart from '../components/AhpsForecastChart'
 import StreamflowForecastChart from '../components/StreamflowForecastChart'
 import HistoryChart from '../components/HistoryChart'
 import RiseForecastPanel from '../components/RiseForecastPanel'
+import MlForecastChart from '../components/MlForecastChart'
 import { useSentinel } from '../contexts/SentinelContext'
 import { useGaugeBriefing } from '../hooks/useGaugeBriefing'
 import { useGaugeHistory } from '../hooks/useGaugeHistory'
@@ -290,6 +291,8 @@ export default function GaugeDetail() {
               observedTime={d.time}
             />
           </div>
+
+          <MlForecastChart gaugeId={id} />
 
           <RiseForecastPanel
             siteId={id}

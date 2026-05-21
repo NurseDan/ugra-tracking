@@ -7,6 +7,7 @@ import {
   fetchAhps, fetchNwm, fetchCanyonLake
 } from './sources.js'
 import { calculateRates, getAlertLevel, dispatchIncident, dispatchToSubscription, ALERT_LEVELS } from './alertEngine.js'
+import { trainGaugeModels, generateLocalForecasts } from './ml-engine.js'
 
 const STALE_AFTER_MIN = 20
 
@@ -240,6 +241,17 @@ async function pollCanyonLake() {
   console.log('[poller] canyon lake done')
 }
 
+async function trainMlEngine() {
+  await trainGaugeModels()
+}
+
+async function pollMlEngine() {
+  await cacheSource('ml_forecasts', async () => {
+    return await generateLocalForecasts()
+  })
+  console.log('[poller] ml forecasts generated')
+}
+
 async function safe(name, fn) {
   try { await fn() }
   catch (err) { console.error(`[poller] ${name} failed:`, err?.message || err) }
@@ -256,6 +268,8 @@ async function tick() {
     if (shouldRun('nwm',  15 * 60_000))    await safe('nwm',     pollNwm)
     if (shouldRun('weather', 60 * 60_000)) await safe('weather', pollWeather)
     if (shouldRun('canyon', 30 * 60_000))  await safe('canyon',  pollCanyonLake)
+    if (shouldRun('ml_train', 24 * 60 * 60_000)) await safe('ml_train', trainMlEngine)
+    if (shouldRun('ml_predict', 15 * 60_000)) await safe('ml_predict', pollMlEngine)
     if (shouldRun('retention', 24 * 60 * 60_000)) await safe('retention', runRetention)
   } finally {
     tickInFlight = false

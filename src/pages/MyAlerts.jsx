@@ -92,10 +92,10 @@ export default function MyAlerts() {
         <h2>My Alerts</h2>
         <p>Sign in to manage personal alert subscriptions. The dashboard,
            history, and exports stay public — only personalized alerts require an account.</p>
-        <a href="/api/login" style={{
+        <a href="/login" style={{
           display: 'inline-block', padding: '10px 16px', background: '#3b82f6',
           color: '#fff', textDecoration: 'none', borderRadius: 6
-        }}>Sign in with Google</a>
+        }}>Sign in</a>
       </div>
     )
   }

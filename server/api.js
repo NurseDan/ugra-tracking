@@ -7,7 +7,10 @@ import { validateWebhookUrl } from './webhooks.js'
 import { dispatchToSubscription } from './alertEngine.js'
 import { limitsFor } from './plans.js'
 import { PROVIDERS, isValidProvider, storeUserLlmKey, deleteUserLlmKey, getUserLlmConfig } from './llm.js'
+import stripeRouter from './stripe.js'
 const router = Router()
+
+router.use('/stripe', stripeRouter)
 
 const ALLOWED_LEVELS = new Set(['GREEN', 'YELLOW', 'ORANGE', 'RED', 'BLACK'])
 const ALLOWED_CHANNELS = new Set(['push', 'email', 'sms', 'webhook'])
@@ -51,6 +54,12 @@ router.get('/gauges/:id/history', async (req, res) => {
     height: row.height_ft,
     flow: row.flow_cfs
   })))
+})
+
+router.get('/ml/forecasts', async (req, res) => {
+  const r = await query(`SELECT payload FROM source_cache WHERE key = 'ml_forecasts'`)
+  if (!r.rows[0]) return res.json({})
+  res.json(r.rows[0].payload)
 })
 
 router.get('/incidents', async (req, res) => {
@@ -341,6 +350,41 @@ router.get('/me/notifications', isAuthenticated, async (req, res) => {
 router.delete('/me/subscriptions/:id', isAuthenticated, async (req, res) => {
   const r = await query(
     `DELETE FROM alert_subscriptions WHERE id = $1 AND user_id = $2`,
+    [req.params.id, userId(req)]
+  )
+  res.json({ deleted: r.rowCount })
+})
+
+// --- Safe Zones (User Properties) ---------------------------------------
+
+router.get('/me/properties', isAuthenticated, async (req, res) => {
+  const r = await query(
+    `SELECT id, name, lat, lng, nearest_gauge_id, warning_threshold_ft, created_at 
+     FROM user_properties 
+     WHERE user_id = $1 
+     ORDER BY created_at DESC`,
+    [userId(req)]
+  )
+  res.json(r.rows)
+})
+
+router.post('/me/properties', isAuthenticated, async (req, res) => {
+  const { name, lat, lng, nearest_gauge_id, warning_threshold_ft } = req.body
+  if (!name || typeof lat !== 'number' || typeof lng !== 'number' || !nearest_gauge_id) {
+    return res.status(400).json({ error: 'Missing required property fields' })
+  }
+  const r = await query(
+    `INSERT INTO user_properties (user_id, name, lat, lng, nearest_gauge_id, warning_threshold_ft)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, name, lat, lng, nearest_gauge_id, warning_threshold_ft`,
+    [userId(req), name, lat, lng, nearest_gauge_id, warning_threshold_ft || null]
+  )
+  res.json(r.rows[0])
+})
+
+router.delete('/me/properties/:id', isAuthenticated, async (req, res) => {
+  const r = await query(
+    `DELETE FROM user_properties WHERE id = $1 AND user_id = $2`,
     [req.params.id, userId(req)]
   )
   res.json({ deleted: r.rowCount })

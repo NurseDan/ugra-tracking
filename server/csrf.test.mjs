@@ -74,15 +74,8 @@ function tokenFromSetCookie(res) {
   assert.notEqual(res.statusCode, 403)
 }
 
-// 5. Exempt path (Stripe webhook) is allowed without a token even on POST.
-{
-  const { req, res } = makeReqRes({ method: 'POST', path: '/api/stripe/webhook' })
-  let nextCalled = false
-  csrfMiddleware(req, res, () => { nextCalled = true })
-  assert.ok(nextCalled, 'Stripe webhook must be CSRF-exempt')
-}
 
-// 6. Exempt sensor reading ingest is allowed (machine-to-machine; auth still applies).
+// 5. Exempt sensor reading ingest is allowed (machine-to-machine; auth still applies).
 {
   const { req, res } = makeReqRes({
     method: 'POST',
@@ -93,7 +86,7 @@ function tokenFromSetCookie(res) {
   assert.ok(nextCalled, 'sensor ingest must be CSRF-exempt')
 }
 
-// 7. Same-length tokens with one byte changed are still rejected (constant-time
+// 6. Same-length tokens with one byte changed are still rejected (constant-time
 //    comparison sanity check).
 {
   const a = 'a'.repeat(32)

@@ -1,0 +1,181 @@
+/* ─────────────────────────────────────────────────────────────────────
+ * Apple Glass UI Overhaul
+ *
+ * Implements a premium, modern dark mode inspired by iOS/macOS UI.
+ * Features deep blacks, vibrant translucent blurs, ultra-thin borders,
+ * and high-contrast system colors.
+ * ───────────────────────────────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+:root {
+  /* Apple Dark Palette */
+  --apple-bg: #000000;
+  --apple-bg-secondary: #121212;
+  --apple-glass: rgba(30, 30, 35, 0.65);
+  --apple-glass-border: rgba(255, 255, 255, 0.08);
+  --apple-glass-border-top: rgba(255, 255, 255, 0.15);
+  
+  --text-main: #ffffff;
+  --text-muted: #cbd5e1; /* Brighter System Gray */
+  --text-tertiary: #94a3b8;
+  
+  /* Apple System Colors */
+  --alert-green: #30D158;
+  --alert-yellow: #FFD60A;
+  --alert-orange: #FF9F0A;
+  --alert-red: #FF453A;
+  --alert-black: #C20000; /* Deep red for extreme */
+  --apple-blue: #0A84FF;
+  --apple-teal: #64D2FF;
+
+  /* Overrides for index.css */
+  --bg-color: var(--apple-bg);
+  --glass-bg: var(--apple-glass);
+  --glass-border: var(--apple-glass-border);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+  background-color: var(--apple-bg);
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(10, 132, 255, 0.06), transparent 50%),
+    radial-gradient(circle at 85% 30%, rgba(48, 209, 88, 0.05), transparent 50%);
+  background-attachment: fixed;
+  color: var(--text-main);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Base Typographic Resets */
+h1, h2, h3, h4, h5, h6, .gauge-name, .header-title {
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Inter', sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* ── Refined Glass Panels ────────────────────────────────────────────── */
+.glass-panel,
+.gauge-card,
+.basin-briefing,
+.reservoir-card,
+.account__card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  border: 1px solid var(--glass-border);
+  border-top: 1px solid var(--apple-glass-border-top);
+  border-radius: 20px;
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s ease;
+}
+
+.gauge-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* No rigid top border on gauge cards (used to be alert color) */
+.gauge-card::before {
+  display: none;
+}
+
+/* ── Sleek Badges (Pills) ────────────────────────────────────────────── */
+.alert-badge {
+  border-radius: 40px;
+  padding: 4px 12px;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.alert-badge.GREEN { color: var(--alert-green); background: rgba(48, 209, 88, 0.12); border: 1px solid rgba(48, 209, 88, 0.25); }
+.alert-badge.YELLOW { color: var(--alert-yellow); background: rgba(255, 214, 10, 0.12); border: 1px solid rgba(255, 214, 10, 0.25); }
+.alert-badge.ORANGE { color: var(--alert-orange); background: rgba(255, 159, 10, 0.12); border: 1px solid rgba(255, 159, 10, 0.25); }
+.alert-badge.RED { color: var(--alert-red); background: rgba(255, 69, 58, 0.12); border: 1px solid rgba(255, 69, 58, 0.25); }
+.alert-badge.BLACK { color: #fff; background: rgba(194, 0, 0, 0.4); border: 1px solid rgba(255, 69, 58, 0.4); }
+
+/* ── Hero Refinements ────────────────────────────────────────────────── */
+.landing-hero__badge {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: var(--text-main);
+  border-radius: 40px;
+  backdrop-filter: blur(10px);
+}
+
+.landing-hero__title {
+  font-weight: 700;
+  font-size: clamp(2.5rem, 6vw, 4.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+  color: #fff;
+}
+
+.landing-gradient-text {
+  background: linear-gradient(135deg, var(--apple-blue), var(--apple-teal));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.landing-btn--primary {
+  background: #ffffff;
+  color: #000000;
+  border-radius: 40px;
+  font-weight: 600;
+  box-shadow: 0 4px 20px rgba(255, 255, 255, 0.2);
+}
+.landing-btn--primary:hover:not(:disabled) {
+  background: #f0f0f0;
+  transform: scale(1.02);
+  box-shadow: 0 6px 24px rgba(255, 255, 255, 0.3);
+}
+
+/* ── UI Details ──────────────────────────────────────────────────────── */
+.metric-value {
+  font-size: 2.25rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #fff;
+}
+
+.metric-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.gauge-metrics {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.gauge-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 16px;
+  margin-top: auto;
+}
+
+.surge-warning {
+  border-radius: 8px;
+  background: rgba(255, 159, 10, 0.15) !important;
+  border: 1px solid rgba(255, 159, 10, 0.3) !important;
+  color: var(--alert-orange) !important;
+}
+
+/* River Corridor (SVG) Text Fix for Dark Theme */
+.corridor-panel text[fill="var(--text-main)"] { fill: #ffffff; }
+.corridor-panel text[fill="var(--text-muted)"] { fill: #8E8E93; }
+
+/* Custom Scrollbar for a cleaner feel */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.2); }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }

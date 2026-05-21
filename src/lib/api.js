@@ -59,6 +59,24 @@ export async function listSubscriptions() {
   return jsonFetch('/api/me/subscriptions')
 }
 
+// --- Safe Zones (User Properties) ---
+
+export async function listProperties() {
+  return jsonFetch('/api/me/properties')
+}
+
+export async function createProperty(body) {
+  return jsonFetch('/api/me/properties', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+}
+
+export async function deleteProperty(id) {
+  return jsonFetch(`/api/me/properties/${id}`, { method: 'DELETE' })
+}
+
 export async function createSubscription(body) {
   return jsonFetch('/api/me/subscriptions', {
     method: 'POST',
@@ -114,6 +132,14 @@ export async function signOutEverywhere() {
 
 export async function deleteAccount() {
   return jsonFetch('/api/me', { method: 'DELETE' })
+}
+
+export async function createCheckoutSession() {
+  return jsonFetch('/api/stripe/create-checkout-session', { method: 'POST' })
+}
+
+export async function createPortalSession() {
+  return jsonFetch('/api/stripe/portal-session', { method: 'POST' })
 }
 
 export function exportUrl(kind, fmt, params = {}) {

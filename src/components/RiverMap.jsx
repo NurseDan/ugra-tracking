@@ -8,6 +8,8 @@ import AnimatedRadarLayer from './AnimatedRadarLayer'
 import MrmsQpeLayer, { MrmsQpeLegend } from './MrmsQpeLayer'
 import MapLayerControls, { useMapLayerPrefs } from './MapLayerControls'
 import L from 'leaflet'
+import { createProperty, listProperties } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
 
 const PRIMARY_GAUGE_IDS = new Set(GAUGES.map(g => g.id))
 // Skip any public sensor whose id duplicates a primary gauge (e.g. the
@@ -35,10 +37,81 @@ function BoundsController() {
   return null
 }
 
-export default function RiverMap({ gauges }) {
+function AddPropertyController({ addingProperty, onPropertyAdded }) {
+  const map = useMap()
+  
+  useEffect(() => {
+    if (!addingProperty) return
+    
+    const onClick = async (e) => {
+      const name = window.prompt("Enter a name for this Safe Zone (e.g. 'My Home'):")
+      if (!name) {
+        onPropertyAdded()
+        return
+      }
+      
+      // Find nearest gauge
+      let nearest = GAUGES[0]
+      let minDist = Infinity
+      for (const g of GAUGES) {
+        if (g.type !== 'river') continue
+        const dist = map.distance([e.latlng.lat, e.latlng.lng], [g.lat, g.lng])
+        if (dist < minDist) {
+          minDist = dist
+          nearest = g
+        }
+      }
+
+      try {
+        await createProperty({
+          name,
+          lat: e.latlng.lat,
+          lng: e.latlng.lng,
+          nearest_gauge_id: nearest.id
+        })
+        // Trigger a refresh somehow, or just let Dashboard reload it via prop/event.
+        window.dispatchEvent(new Event('refresh_properties'))
+        onPropertyAdded()
+      } catch (err) {
+        alert("Failed to save property: " + err.message)
+        onPropertyAdded()
+      }
+    }
+
+    map.on('click', onClick)
+    return () => map.off('click', onClick)
+  }, [addingProperty, map, onPropertyAdded])
+
+  useEffect(() => {
+    if (addingProperty) {
+      document.querySelector('.leaflet-container').style.cursor = 'crosshair'
+    } else {
+      document.querySelector('.leaflet-container').style.cursor = ''
+    }
+  }, [addingProperty])
+
+  return null
+}
+
+export default function RiverMap({ gauges, addingProperty, onPropertyAdded }) {
   const sorted = [...GAUGES].sort((a, b) => a.order - b.order)
   const navigate = useNavigate()
   const prefs = useMapLayerPrefs()
+  const { session } = useAuth()
+  const [properties, setProperties] = React.useState([])
+
+  useEffect(() => {
+    if (!session) return
+    const fetchProps = async () => {
+      try {
+        const data = await listProperties()
+        setProperties(data)
+      } catch (err) { }
+    }
+    fetchProps()
+    window.addEventListener('refresh_properties', fetchProps)
+    return () => window.removeEventListener('refresh_properties', fetchProps)
+  }, [session])
 
   const guadalupeStem = sorted
     .filter(g => GUADALUPE_STEM_ORDERS.has(g.order))
@@ -116,6 +189,40 @@ export default function RiverMap({ gauges }) {
         )
       })}
 
+      {properties.map(p => {
+        const d = gauges[p.nearest_gauge_id]
+        const isAlert = d?.alert && d.alert !== 'GREEN' && d.alert !== 'NORMAL'
+        const color = isAlert ? '#FF453A' : '#30D158'
+        
+        const houseIcon = new L.DivIcon({
+          html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; border: 2px solid white; box-shadow: 0 0 10px ${color};">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          </div>`,
+          className: 'property-icon',
+          iconSize: [20, 20],
+          iconAnchor: [10, 10]
+        })
+
+        return (
+          <Marker key={p.id} position={[p.lat, p.lng]} icon={houseIcon}>
+            <Popup>
+              <div style={{ minWidth: 150 }}>
+                <strong style={{ fontSize: '1.1rem' }}>{p.name}</strong>
+                <div style={{ marginTop: 4, fontSize: '0.85rem', color: '#64748b' }}>
+                  Nearest Gauge: {GAUGES.find(g => g.id === p.nearest_gauge_id)?.name || p.nearest_gauge_id}
+                </div>
+                {isAlert && (
+                  <div style={{ marginTop: 8, padding: '4px 8px', background: '#FF453A22', color: '#FF453A', borderRadius: 4, fontSize: '0.8rem', fontWeight: 'bold' }}>
+                    Warning: Nearest gauge is surging!
+                  </div>
+                )}
+              </div>
+            </Popup>
+          </Marker>
+        )
+      })}
+
+      <AddPropertyController addingProperty={addingProperty} onPropertyAdded={onPropertyAdded} />
       <MapLayerControls prefs={prefs} position="topright" />
       {prefs.qpe && <MrmsQpeLegend window={prefs.qpeWindow} position="bottomright" />}
     </MapContainer>

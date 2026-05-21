@@ -6,6 +6,7 @@ import {
   signOutEverywhere, deleteAccount, updateUserProfile,
   getLlmKey, saveLlmKey, deleteLlmKey,
   listMySensors, createSensor, deleteSensor,
+  createCheckoutSession, createPortalSession
 } from '../lib/api'
 import './AccountSettings.css'
 
@@ -59,7 +60,7 @@ export default function AccountSettings() {
         <h1 className="account__title">Account Settings</h1>
         <div style={{ gridColumn: '1 / -1' }}>
           <p>Sign in to manage your account.</p>
-          <a href="/api/login" className="account__btn">Sign in with Google</a>
+          <Link to="/login" className="account__btn">Sign in</Link>
         </div>
       </div>
     )
@@ -175,7 +176,7 @@ function ProfileTab({ user, onSaved, flash }) {
           </div>
           <div className="account__field">
             <span className="account__field-label">Sign-in method</span>
-            <span className="account__field-value">Google</span>
+            <span className="account__field-value">Email</span>
           </div>
 
           <button type="submit" className="account__btn" disabled={!dirty || saving}>
@@ -193,6 +194,30 @@ function UsageTab({ usage }) {
   const aiUsed = usage?.aiCalls.used ?? 0
   const aiLimit = usage?.aiCalls.limit
 
+  const [loading, setLoading] = useState(false)
+
+  async function handleCheckout() {
+    setLoading(true)
+    try {
+      const { url } = await createCheckoutSession()
+      window.location.href = url
+    } catch (err) {
+      alert(err.message)
+      setLoading(false)
+    }
+  }
+
+  async function handlePortal() {
+    setLoading(true)
+    try {
+      const { url } = await createPortalSession()
+      window.location.href = url
+    } catch (err) {
+      alert(err.message)
+      setLoading(false)
+    }
+  }
+
   return (
     <>
       <h2 className="account__section-title">Usage</h2>
@@ -201,6 +226,24 @@ function UsageTab({ usage }) {
       <div className="account__card">
         <UsageBar label="Alert subscriptions" used={subUsed} limit={subLimit} />
         <UsageBar label="AI briefings today" used={aiUsed} limit={aiLimit} />
+      </div>
+
+      <div className="account__card" style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <h3 style={{ margin: '0 0 0.25rem' }}>Current Plan: <span style={{ textTransform: 'capitalize' }}>{usage?.plan || 'free'}</span></h3>
+          {usage?.plan === 'free' && <p style={{ margin: 0, fontSize: '0.9rem', color: 'rgba(17,24,39,0.7)' }}>Upgrade to Pro for unlimited alerts and AI briefings.</p>}
+        </div>
+        <div>
+          {usage?.plan === 'free' ? (
+            <button className="account__btn" onClick={handleCheckout} disabled={loading}>
+              {loading ? 'Redirecting...' : 'Upgrade to Pro'}
+            </button>
+          ) : (
+            <button className="account__btn" onClick={handlePortal} disabled={loading}>
+              {loading ? 'Redirecting...' : 'Manage Subscription'}
+            </button>
+          )}
+        </div>
       </div>
     </>
   )

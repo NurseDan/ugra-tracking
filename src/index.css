@@ -1072,17 +1072,17 @@ body {
 .policy-content h1 {
   margin-top: 0;
   margin-bottom: 0.5rem;
-  color: #fff;
+  color: var(--text-main);
 }
 
 .policy-content h2 {
   margin-top: 2rem;
   margin-bottom: 1rem;
-  color: rgba(255,255,255,0.9);
+  color: var(--text-main);
 }
 
 .policy-content p, .policy-content ul {
-  color: rgba(255,255,255,0.7);
+  color: var(--text-muted);
   margin-bottom: 1rem;
 }
 

@@ -69,7 +69,7 @@ During emergencies, follow official guidance and move to higher ground if condit
 - **Maps**: Leaflet + react-leaflet
 - **Backend**: Node.js + Express v5
 - **Database**: PostgreSQL
-- **Auth**: Google OAuth (Passport.js)
+- **Auth**: Email/Password (bcrypt + express-session)
 - **Notifications**: Web Push API + Nodemailer
 - **Deployment**: Railway
 

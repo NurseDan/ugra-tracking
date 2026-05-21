@@ -9,7 +9,6 @@
 //
 // We intentionally skip enforcement for:
 //   - GET / HEAD / OPTIONS (read-only, no state change)
-//   - /api/stripe/webhook (signed by Stripe, raw body)
 //   - /api/sensors/:id/readings (machine ingest; auth still required)
 //
 // The token is opaque and rotates only when the cookie expires (7d).

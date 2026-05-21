@@ -72,7 +72,7 @@ export async function setupAuth(app) {
           // Allow setting a password for an existing OAuth account
           const hash = await bcrypt.hash(password, 10)
           await query(
-            `UPDATE users SET password_hash = $1, provider = 'local', first_name = COALESCE($2, first_name), last_name = COALESCE($3, last_name), updated_at = now() WHERE id = $4`,
+            `UPDATE users SET password_hash = $1, first_name = COALESCE($2, first_name), last_name = COALESCE($3, last_name), updated_at = now() WHERE id = $4`,
             [hash, first_name?.trim() || null, last_name?.trim() || null, existing.rows[0].id]
           )
           req.session.userId = existing.rows[0].id
@@ -84,8 +84,8 @@ export async function setupAuth(app) {
       const id = crypto.randomUUID()
       
       await query(
-        `INSERT INTO users (id, email, password_hash, first_name, last_name, provider, updated_at)
-         VALUES ($1, $2, $3, $4, $5, 'local', now())`,
+        `INSERT INTO users (id, email, password_hash, first_name, last_name, updated_at)
+         VALUES ($1, $2, $3, $4, $5, now())`,
         [id, normalizedEmail, hash, first_name?.trim() || null, last_name?.trim() || null]
       )
 

@@ -11,12 +11,12 @@ import { mergeHistory, loadForecastCache, isForecastStale } from './lib/gaugeHis
 import { generateAllForecasts } from './lib/riseForecast'
 import { WifiOff } from 'lucide-react'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import Dashboard from './pages/Dashboard'
-import PublicDashboard from './pages/PublicDashboard'
+
+
 import { useNotifications } from './hooks/useNotifications'
 import AppHeader from './components/AppHeader'
 import { SentinelProvider } from './contexts/SentinelContext'
-import Landing from './pages/Landing'
+import LandingDashboard from './pages/LandingDashboard'
 import Admin from './pages/Admin'
 import PrivacyPolicy from './pages/PrivacyPolicy'
 import TermsOfService from './pages/TermsOfService'
@@ -113,6 +113,12 @@ export default function App() {
   )
 }
 
+function ProtectedRoute({ children }) {
+  const { session } = useAuth()
+  if (!session) return <Navigate to="/login" />
+  return children
+}
+
 function AppRoutes() {
   const { session } = useAuth()
 
@@ -128,16 +134,14 @@ function AppRoutes() {
     <Routes>
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
-      <Route path="/login" element={!session ? <Login /> : <AuthenticatedApp />} />
-      <Route path="/register" element={!session ? <Register /> : <AuthenticatedApp />} />
-      <Route path="*" element={
-        !session ? <Landing /> : <AuthenticatedApp />
-      } />
+      <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
+      <Route path="/register" element={!session ? <Register /> : <Navigate to="/" />} />
+      <Route path="*" element={<MainLayout />} />
     </Routes>
   )
 }
 
-function AuthenticatedApp() {
+function MainLayout() {
   const [data, setData] = useState({})
   const [surgeEvents, setSurgeEvents] = useState([])
   const [lastUpdate, setLastUpdate] = useState(null)
@@ -253,9 +257,10 @@ function AuthenticatedApp() {
   const highestAlert = alertsArray.length > 0 ? getHighestAlert(alertsArray) : 'GREEN'
 
   return (
-    <SentinelProvider data={data} surgeEvents={surgeEvents} cachedForecasts={cachedForecasts}>
+    <SentinelProvider gaugesData={data} surgeEvents={surgeEvents} cachedForecasts={cachedForecasts}>
       <AppHeader highestAlert={highestAlert} lastUpdate={lastUpdate} />
-      {(isOffline || fetchError) && (
+      <div className="dashboard-container">
+        {(isOffline || fetchError) && (
           <div className="error-banner">
             <WifiOff size={16} />
             {isOffline ? 'Offline — showing last cached river data' : 'Data refresh failed — displaying last known values'}
@@ -264,15 +269,16 @@ function AuthenticatedApp() {
         )}
         <Suspense fallback={<RouteFallback />}>
           <Routes>
-          <Route path="/" element={<Dashboard data={data} lastUpdate={lastUpdate} />} />
-          <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
-          <Route path="/incidents" element={<Incidents />} />
-          <Route path="/my-alerts" element={<MyAlerts data={data} />} />
-          <Route path="/exports" element={<Exports data={data} />} />
-          <Route path="/account" element={<AccountSettings />} />
-          <Route path="/admin" element={<Admin />} />
-        </Routes>
-      </Suspense>
+            <Route path="/" element={<LandingDashboard data={data} lastUpdate={lastUpdate} />} />
+            <Route path="/gauge/:id" element={<GaugeDetail data={data} />} />
+            <Route path="/incidents" element={<Incidents />} />
+            <Route path="/my-alerts" element={<ProtectedRoute><MyAlerts data={data} /></ProtectedRoute>} />
+            <Route path="/exports" element={<ProtectedRoute><Exports data={data} /></ProtectedRoute>} />
+            <Route path="/account" element={<ProtectedRoute><AccountSettings /></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+          </Routes>
+        </Suspense>
+      </div>
     </SentinelProvider>
   )
 }

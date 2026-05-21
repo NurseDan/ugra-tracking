@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash text,
   provider      text,
   provider_id   text,
+  stripe_customer_id text,
+  stripe_subscription_id text,
   plan          text not null default 'free',
   plan_expires_at timestamptz,
   default_email     text,
@@ -22,6 +24,8 @@ CREATE TABLE IF NOT EXISTS users (
 ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS provider      text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS provider_id   text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS plan          text not null default 'free';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_expires_at timestamptz;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS default_email     text;
@@ -218,7 +222,21 @@ CREATE TABLE IF NOT EXISTS sensor_readings (
   PRIMARY KEY (sensor_id, observed_at)
 );
 
--- Clean up obsolete Stripe integrations and plans
-ALTER TABLE users DROP COLUMN IF EXISTS stripe_customer_id;
-ALTER TABLE users DROP COLUMN IF EXISTS stripe_subscription_id;
-UPDATE users SET plan = 'free' WHERE plan NOT IN ('free', 'admin');
+
+
+-- Custom property "Safe Zones" for personalized flood alerts.
+CREATE TABLE IF NOT EXISTS user_properties (
+  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id              text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name                 text NOT NULL,
+  lat                  double precision NOT NULL,
+  lng                  double precision NOT NULL,
+  nearest_gauge_id     text NOT NULL,
+  warning_threshold_ft double precision,
+  created_at           timestamptz DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_properties_user ON user_properties(user_id);
+
+-- Clean up obsolete OAuth integrations
+ALTER TABLE users DROP COLUMN IF EXISTS provider;
+ALTER TABLE users DROP COLUMN IF EXISTS provider_id;

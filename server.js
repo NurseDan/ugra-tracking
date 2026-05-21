@@ -50,7 +50,6 @@ app.use((req, res, next) => {
   )
   next()
 })
-
 // Stripe webhook needs the raw body — register before express.json()
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }))
 app.use(express.json({ limit: '64kb' }))
@@ -192,9 +191,6 @@ app.post('/api/chat', async (req, res) => {
     if (used >= limits.aiCallsPerDay)
       return res.status(429).json({ error: `Daily AI limit reached (${limits.aiCallsPerDay}). Add your own API key for unlimited use.` })
   }
-
-  const cleanSystem = sanitize(system)
-  const cleanUser   = sanitize(user)
 
   // Server-side cache: identical (model, system, user, schema) within the
   // TTL window returns the saved completion without spending OpenAI tokens.
