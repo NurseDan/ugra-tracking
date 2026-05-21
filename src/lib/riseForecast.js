@@ -117,10 +117,10 @@ function deterministicForecast({ currentStage, riseRateFtPerHr, qpf, floodStageF
 
   if (llmPeak && llmPeak.stageFt > currentStage && llmPeak.stageFt !== peak.stageFt) {
     const scale = llmPeak.stageFt / Math.max(0.01, peak.stageFt)
-    const adjPoints = points.map(p => {
+    const adjPoints = points.map((p, i) => {
       const adj = currentStage + (p.stageFt - currentStage) * scale
       const s = Math.max(0, adj)
-      const u = Math.max(0.05, 0.15 * (points.indexOf(p) / 24))
+      const u = Math.max(0.05, 0.15 * (i / 24))
       return { ...p, stageFt: s, low: Math.max(0, s - u), high: s + u }
     })
     let adjPeak = { stageFt: currentStage, time: new Date(now).toISOString(), category: floodCategory(currentStage, floodStageFt) }

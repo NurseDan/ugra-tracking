@@ -6,11 +6,13 @@ import { formatCDT } from '../lib/formatTime'
 import { GAUGES } from '../config/gauges'
 import NotificationSettings from './NotificationSettings'
 import { usePlan } from '../hooks/usePlan'
+import { useAuth } from '../context/AuthContext'
 import './AppHeader.css'
 
 export default function AppHeader({ highestAlert, lastUpdate }) {
   const [notifOpen, setNotifOpen] = useState(false)
   const { plan } = usePlan()
+  const { user, signOut } = useAuth()
 
   useEffect(() => {
     if (!notifOpen) return
@@ -60,6 +62,11 @@ export default function AppHeader({ highestAlert, lastUpdate }) {
           </nav>
 
           <div className="header-meta app-header__meta">
+            {user && (
+              <button type="button" className="app-header__link" onClick={signOut}>
+                Sign out
+              </button>
+            )}
             <div className={`alert-badge ${highestAlert}`}>
               <AlertTriangle size={14} /> {ALERT_LEVELS[highestAlert]?.label || 'Normal'}
             </div>

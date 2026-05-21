@@ -8,11 +8,16 @@ import { startPoller } from './server/poller.js'
 import { setupAuth } from './server/auth.js'
 import apiRouter from './server/api.js'
 import { callProvider, getUserLlmConfig, open as openSealed } from './server/llm.js'
+import { handleStripeWebhook } from './server/stripe.js'
 import { csrfMiddleware } from './server/csrf.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const app = express()
+
+// Lightweight liveness probe for cloud hosts. Intentionally does not touch
+// the database so it can report process health independently of dependencies.
+app.get('/health', (_req, res) => res.json({ ok: true }))
 
 // --- Security headers --------------------------------------------------
 // Defense-in-depth headers that cost nothing to set. The CSP allows the
@@ -133,7 +138,7 @@ app.post('/api/chat', async (req, res) => {
 
   // Identify the caller (may be unauthenticated for the public proxy path).
   const sub = req.user?.claims?.sub
-  const userId = req.user?.id ?? (sub ? `google:${sub}` : null)
+  const userId = req.user?.id ?? (sub ? `google:${sub}` : null) ?? req.session?.userId ?? null
 
   // 1) Prefer the user's own stored API key (BYOK). No plan check, no quota,
   //    no usage accounting — they're paying their provider directly.
@@ -180,7 +185,7 @@ app.post('/api/chat', async (req, res) => {
   }
   const limits = limitsFor(plan)
   if (limits.aiCallsPerDay === 0)
-    return res.status(402).json({ error: 'Server-funded AI is disabled on your plan. Add your own API key under Account → AI Key for unlimited use.' })
+    return res.status(402).json({ error: 'AI briefings require a Pro subscription or your own API key. Upgrade to Pro under Account Settings, or add your own OpenAI/Anthropic key under Account → AI Key.' })
   if (userId && limits.aiCallsPerDay !== Infinity) {
     const { query: dbQuery } = await import('./server/db.js')
     const usageRow = await dbQuery(
@@ -290,6 +295,17 @@ async function main() {
     app.get('/api/auth/user', (_req, res) => res.status(401).json({ message: 'Auth not configured' }))
     app.get('/api/login', (_req, res) => res.status(503).send('Auth not configured on this deployment'))
   }
+
+  app.post('/api/stripe/webhook', async (req, res) => {
+    const sig = req.headers['stripe-signature']
+    try {
+      await handleStripeWebhook(req.body, sig)
+      res.json({ received: true })
+    } catch (err) {
+      console.error('[stripe webhook]', err.message)
+      res.status(400).json({ error: err.message })
+    }
+  })
 
   app.use('/api', apiRouter)
 

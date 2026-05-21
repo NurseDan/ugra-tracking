@@ -41,7 +41,7 @@ body {
   border: 1px solid var(--glass-border);
   border-radius: 16px;
   box-shadow: var(--glass-shadow);
-  padding: 24px;
+  padding: 20px 24px;
 }
 
 .dashboard-container {
@@ -109,7 +109,7 @@ body {
   top: 0;
   left: 0;
   width: 100%;
-  height: 4px;
+  height: 5px;
   background: var(--card-color, var(--glass-border));
 }
 
@@ -129,6 +129,7 @@ body {
 .gauge-metrics {
   display: flex;
   justify-content: space-between;
+  gap: 16px;
   margin-bottom: 20px;
 }
 
@@ -148,6 +149,7 @@ body {
 .metric-value {
   font-size: 1.75rem;
   font-weight: 700;
+  line-height: 1.15;
 }
 
 .metric-unit {
@@ -197,10 +199,10 @@ body {
 }
 
 .section-label {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #475569;
+  color: #64748b;
   margin-bottom: 10px;
   font-weight: 600;
 }
@@ -209,7 +211,7 @@ body {
 .progress-bar-track {
   background: rgba(255, 255, 255, 0.07);
   border-radius: 4px;
-  height: 5px;
+  height: 8px;
   overflow: hidden;
 }
 
@@ -289,10 +291,10 @@ body {
 }
 
 .rate-chip-label {
-  font-size: 0.68rem;
+  font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #475569;
+  color: #64748b;
 }
 
 /* ── Surge banners ── */
@@ -382,7 +384,7 @@ body {
 .ai-stat:last-child { border-right: none; }
 
 .ai-stat-label {
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #475569;

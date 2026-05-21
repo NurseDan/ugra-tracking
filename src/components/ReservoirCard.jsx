@@ -67,6 +67,29 @@ function Skeleton() {
 
 const STALE_AFTER_MS = 30 * 60 * 1000
 
+function StatusPill({ error, hasData, isStale, partial, status }) {
+  if (error && !hasData) {
+    return <span className="reservoir-card__pill reservoir-card__pill--err" title={error}>Offline</span>
+  }
+  if (isStale && hasData) {
+    const title = error
+      ? `Last refresh failed — showing cached values. ${error}`
+      : 'Data has not refreshed recently — showing cached values.'
+    return <span className="reservoir-card__pill reservoir-card__pill--warn" title={title}>Stale</span>
+  }
+  if (partial) {
+    return (
+      <span className="reservoir-card__pill reservoir-card__pill--warn" title={status?.warnings?.join(' · ') || 'Some sources unavailable'}>
+        Partial data
+      </span>
+    )
+  }
+  if (hasData) {
+    return <span className="reservoir-card__pill" title="All sources reporting">Live</span>
+  }
+  return null
+}
+
 export default function ReservoirCard({ className = '' } = {}) {
   const ctx = useSentinel()
   const status = ctx.reservoirStatus
@@ -113,33 +136,7 @@ export default function ReservoirCard({ className = '' } = {}) {
           </div>
           <div className="reservoir-card__subtitle">Reservoir status</div>
         </div>
-        {error && !hasData ? (
-          <span className="reservoir-card__pill reservoir-card__pill--err" title={error}>
-            Offline
-          </span>
-        ) : isStale && hasData ? (
-          <span
-            className="reservoir-card__pill reservoir-card__pill--warn"
-            title={
-              error
-                ? `Last refresh failed — showing cached values. ${error}`
-                : 'Data has not refreshed recently — showing cached values.'
-            }
-          >
-            Stale
-          </span>
-        ) : partial ? (
-          <span
-            className="reservoir-card__pill reservoir-card__pill--warn"
-            title={status?.warnings?.join(' · ') || 'Some sources unavailable'}
-          >
-            Partial data
-          </span>
-        ) : hasData ? (
-          <span className="reservoir-card__pill" title="All sources reporting">
-            Live
-          </span>
-        ) : null}
+        <StatusPill error={error} hasData={hasData} isStale={isStale} partial={partial} status={status} />
       </header>
 
       {isInitialLoading ? (

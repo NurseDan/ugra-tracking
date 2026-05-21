@@ -1,9 +1,14 @@
 export const PLAN_LIMITS = {
-  // The platform is fully free for everyone.
   free: {
     maxSubscriptions: Infinity,
     allowedChannels: ['push', 'email', 'sms', 'webhook'],
-    aiCallsPerDay: Infinity,
+    aiCallsPerDay: 0,        // free users must bring their own key
+    canExport: true,
+  },
+  pro: {
+    maxSubscriptions: Infinity,
+    allowedChannels: ['push', 'email', 'sms', 'webhook'],
+    aiCallsPerDay: 8,        // server-funded, 8 calls/day
     canExport: true,
   },
   admin: {

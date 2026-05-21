@@ -26,4 +26,11 @@ export async function initSchema() {
   const sql = readFileSync(join(here, 'schema.sql'), 'utf8')
   await pool.query(sql)
   console.log('[db] schema ready')
+
+  try {
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`)
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT`)
+  } catch (err) {
+    console.warn('[db] stripe column migration failed:', err.message)
+  }
 }

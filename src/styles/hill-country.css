@@ -1,403 +1,156 @@
-/* ─────────────────────────────────────────────────────────────────────
- * Hill Country redesign
- *
- * Loaded after index.css so the variables and overrides win. The palette
- * is drawn from the Texas Hill Country: limestone cream, Guadalupe river
- * teal, cedar green, and a coral sunset for warm accents. Typography
- * pairs Fraunces (a friendly modern serif) for display with Inter for UI.
- *
- * Strategy: redefine the design tokens that index.css already consumes
- * via var(...) so most surfaces flip automatically, then override the
- * smaller set of selectors that hardcode dark-slate colors.
- * ───────────────────────────────────────────────────────────────────── */
+/* Dark theme enhancements — improves readability over base index.css */
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@300;400;500;600;700&display=swap');
+/* Remove decorative SVG silhouette that was cream-colored */
+body::after { display: none; }
 
-:root {
-  /* Hill Country palette ----------------------------------------------- */
-  --hc-cream:        #FAF6EC;  /* limestone cream — page background     */
-  --hc-cream-deep:   #F1EADB;  /* slightly darker cream — surfaces      */
-  --hc-paper:        #FFFFFF;  /* card surface                          */
-  --hc-river:        #2F6B86;  /* Guadalupe teal — primary accent       */
-  --hc-river-bright: #3F8FB0;  /* lighter teal for hover/glow           */
-  --hc-river-deep:   #1E4D63;  /* deep river for active                 */
-  --hc-cedar:        #5C7E5A;  /* cedar/oak green                       */
-  --hc-bluebonnet:   #5B6FB7;  /* bluebonnet — secondary water accent   */
-  --hc-sunset:       #D9714A;  /* sunset coral — warning/cta highlight  */
-  --hc-honey:        #E0A04A;  /* honey/wildflower yellow               */
-  --hc-stone:        #8C8273;  /* dusty limestone — muted UI            */
-  --hc-stone-soft:   #B8AE9C;  /* lighter dust                          */
-  --hc-ink:          #2A2723;  /* warm near-black text                  */
-  --hc-bark:         #5A4632;  /* oak bark — secondary text             */
-  --hc-line:         #E1D9C7;  /* warm divider                          */
-
-  /* Override the legacy tokens index.css already uses ----------------- */
-  --bg-color:           var(--hc-cream);
-  --bg-gradient-start:  var(--hc-cream);
-  --bg-gradient-end:    var(--hc-cream-deep);
-
-  --glass-bg:           var(--hc-paper);
-  --glass-border:       var(--hc-line);
-  --glass-shadow:       0 1px 2px rgba(42, 39, 35, 0.04),
-                        0 8px 24px -8px rgba(42, 39, 35, 0.12);
-
-  --text-main:          var(--hc-ink);
-  --text-muted:         var(--hc-bark);
-
-  /* Soften the alert colors so they sit on a warm cream backdrop ------ */
-  --alert-green:        #4F8A5C;
-  --alert-yellow:       #C99518;
-  --alert-orange:       #D9714A;
-  --alert-red:          #C6463C;
-  --alert-black:        #6F2B26;
-
-  /* Shape + motion ---------------------------------------------------- */
-  --hc-radius-sm: 8px;
-  --hc-radius:    14px;
-  --hc-radius-lg: 22px;
-  --hc-shadow-sm: 0 1px 2px rgba(42,39,35,0.06);
-  --hc-shadow:    0 1px 2px rgba(42,39,35,0.05), 0 10px 24px -10px rgba(42,39,35,0.18);
-  --hc-shadow-lg: 0 4px 12px rgba(42,39,35,0.08), 0 20px 48px -16px rgba(42,39,35,0.22);
-  --hc-font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
-  --hc-font-body:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+/* ── Stronger glass panels ── */
+.glass-panel {
+  background: rgba(17, 27, 45, 0.9);
+  border-color: rgba(255, 255, 255, 0.14);
 }
 
-/* Body: warm cream backdrop with a faint rolling-hills silhouette ----- */
-body {
-  font-family: var(--hc-font-body);
-  background:
-    linear-gradient(180deg, var(--hc-cream) 0%, var(--hc-cream-deep) 100%) fixed;
-  color: var(--hc-ink);
-  -webkit-font-smoothing: antialiased;
+/* ── Gauge cards ── */
+.gauge-card::before {
+  height: 5px;
 }
 
-/* Subtle horizon ridge sitting at the bottom of every page. Built from
- * an inline SVG data URI so we don't ship any binary assets and the
- * tone stays in sync with the palette tokens. */
-body::after {
-  content: '';
-  position: fixed;
-  inset: auto 0 0 0;
-  height: 120px;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.55;
-  background-repeat: no-repeat;
-  background-position: bottom center;
-  background-size: cover;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 160' preserveAspectRatio='none'><path fill='%235C7E5A' fill-opacity='0.25' d='M0 110 L80 90 L160 105 L240 70 L320 95 L400 80 L500 110 L600 85 L700 100 L820 75 L920 105 L1040 90 L1160 110 L1280 85 L1380 100 L1440 95 L1440 160 L0 160 Z'/><path fill='%232F6B86' fill-opacity='0.22' d='M0 135 L120 120 L240 130 L360 115 L480 132 L600 120 L720 138 L840 125 L960 135 L1080 122 L1200 138 L1320 128 L1440 134 L1440 160 L0 160 Z'/></svg>");
+.gauge-header {
+  align-items: center;
+  margin-bottom: 16px;
+  gap: 8px;
 }
 
-#root { position: relative; z-index: 1; }
-
-/* Display headings get the friendly serif, with tighter optical sizing.
- * The body keeps Inter so dense data tables remain crisp. */
-h1, h2, h3, .header-title, .landing-hero__title, .landing-section-title,
-.landing-final-cta__title, .account__title, .detail-title {
-  font-family: var(--hc-font-display);
+.gauge-name {
+  color: #e2e8f0;
+  font-size: 1rem;
+  font-weight: 700;
   letter-spacing: -0.01em;
+  line-height: 1.3;
 }
 
-/* ── Cards & surfaces ──────────────────────────────────────────────── */
-
-.glass-panel,
-.landing-final-cta__inner.glass-panel {
-  background: var(--hc-paper);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border: 1px solid var(--hc-line);
-  border-radius: var(--hc-radius);
-  box-shadow: var(--hc-shadow);
+.gauge-metrics {
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
-.gauge-card { background: var(--hc-paper); border: 1px solid var(--hc-line); border-radius: var(--hc-radius); }
-.gauge-card:hover { transform: translateY(-3px); box-shadow: var(--hc-shadow-lg); }
-
-.gauge-name, .metric-value, .ai-stat-value, .detail-title { color: var(--hc-ink); }
-.metric-label, .metric-unit, .gauge-footer, .ai-stat-label, .chart-summary, .chart-legend, .section-label, .rate-chip-label {
-  color: var(--hc-bark);
+.metric-label {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-bottom: 3px;
 }
 
-/* Map + chart wrappers play nice on cream */
-.map-container-wrapper { border: 1px solid var(--hc-line); }
-.progress-bar-track { background: rgba(92, 126, 90, 0.14); }
-.rate-chip { background: var(--hc-cream-deep); border: 1px solid var(--hc-line); color: var(--hc-ink); }
-
-/* ── Alert badges: warmer fills, readable on cream ────────────────── */
-
-.alert-badge { background-color: rgba(92,126,90,0.08); color: var(--hc-bark); }
-.alert-badge.GREEN  { color: var(--alert-green);  background-color: rgba(79,138,92,0.12);  border: 1px solid rgba(79,138,92,0.35); }
-.alert-badge.YELLOW { color: var(--alert-yellow); background-color: rgba(201,149,24,0.14); border: 1px solid rgba(201,149,24,0.4); }
-.alert-badge.ORANGE { color: var(--alert-orange); background-color: rgba(217,113,74,0.14); border: 1px solid rgba(217,113,74,0.4); }
-.alert-badge.RED    { color: var(--alert-red);    background-color: rgba(198,70,60,0.14);  border: 1px solid rgba(198,70,60,0.4); }
-.alert-badge.BLACK  { color: #fff; background-color: var(--alert-black); border: 1px solid var(--alert-black); }
-
-.surge-banner-block--red    { background: rgba(198,70,60,0.10); border-color: rgba(198,70,60,0.4); }
-.surge-banner-block--orange { background: rgba(217,113,74,0.10); border-color: rgba(217,113,74,0.4); }
-.surge-banner-title { color: var(--alert-red); }
-.surge-banner-block--orange .surge-banner-title { color: var(--alert-orange); }
-.surge-banner-body { color: var(--hc-ink); }
-.surge-link { color: var(--hc-river); }
-.back-link { color: var(--hc-river); }
-.back-link:hover { color: var(--hc-river-bright); }
-
-.stale-banner {
-  background: rgba(224, 160, 74, 0.14);
-  border-color: rgba(224, 160, 74, 0.4);
-  color: var(--hc-bark);
-}
-
-/* ── Header (the rendered app shell) ─────────────────────────────── */
-
-.header-title,
-.app-header__brand {
-  background: none;
-  -webkit-text-fill-color: var(--hc-ink);
-  color: var(--hc-ink);
-  font-family: var(--hc-font-display);
+.metric-value {
+  font-size: 1.6rem;
+  line-height: 1.15;
   font-weight: 700;
 }
 
-.header-time { color: var(--hc-bark); }
+.metric-unit {
+  font-size: 0.8rem;
+}
+
+/* ── Progress bar ── */
+.progress-bar-track {
+  height: 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ── Labels ── */
+.section-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  letter-spacing: 0.08em;
+}
+
+.rate-chip {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.rate-chip-label {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+/* ── Gauge footer ── */
+.gauge-footer {
+  font-size: 0.78rem;
+  padding-top: 10px;
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ── Dashboard grid ── */
+.dashboard-grid {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+/* ── AppHeader ── */
+.app-header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(10, 17, 30, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
 
 .app-header__link,
 .app-header__notif-btn {
-  background: var(--hc-paper);
-  border: 1px solid var(--hc-line);
-  color: var(--hc-bark);
+  border-color: rgba(255, 255, 255, 0.14);
+  color: #cbd5e1;
+  font-size: 0.88rem;
 }
-.app-header__link:hover,
-.app-header__notif-btn:hover {
-  background: var(--hc-cream-deep);
-  color: var(--hc-ink);
-}
+
 .app-header__link.is-active {
-  background: rgba(47,107,134,0.10);
-  border-color: rgba(47,107,134,0.35);
-  color: var(--hc-river-deep);
+  background: rgba(96, 165, 250, 0.22);
+  border-color: rgba(96, 165, 250, 0.5);
+  color: #f0f8ff;
 }
 
-.notif-modal-backdrop {
-  background: rgba(42, 39, 35, 0.55);
-}
-.notif-modal-close {
-  background: var(--hc-paper);
-  border: 1px solid var(--hc-line);
-  color: var(--hc-ink);
+/* ── AI Briefing card ── */
+.briefing-header {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  padding-bottom: 14px;
+  margin-bottom: 14px;
 }
 
-/* ── Landing page ─────────────────────────────────────────────────── */
-
-.landing-root { background: linear-gradient(180deg, var(--hc-cream) 0%, var(--hc-cream-deep) 100%); }
-
-.landing-nav { border-bottom: 1px solid var(--hc-line); background: rgba(250,246,236,0.85); backdrop-filter: blur(6px); }
-.landing-nav__brand { color: var(--hc-ink); font-family: var(--hc-font-display); font-weight: 700; }
-
-.landing-btn--primary {
-  background: var(--hc-river);
-  color: #fff;
-  box-shadow: 0 6px 18px rgba(47,107,134,0.28);
-}
-.landing-btn--primary:hover:not(:disabled) {
-  background: var(--hc-river-bright);
-  box-shadow: 0 10px 26px rgba(47,107,134,0.36);
-}
-.landing-btn--outline {
-  background: transparent;
-  color: var(--hc-bark);
-  border: 1px solid var(--hc-line);
-}
-.landing-btn--outline:hover {
-  background: var(--hc-cream-deep);
-  color: var(--hc-ink);
+.briefing-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
-.landing-hero__badge {
-  background: rgba(92, 126, 90, 0.12);
-  color: var(--hc-cedar);
-  border: 1px solid rgba(92, 126, 90, 0.25);
-}
-.landing-hero__title { color: var(--hc-ink); }
-.landing-gradient-text {
-  background: linear-gradient(120deg, var(--hc-river) 0%, var(--hc-cedar) 60%, var(--hc-sunset) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
-.landing-hero__sub { color: var(--hc-bark); }
-.landing-hero__cta-sub { color: var(--hc-stone); }
-
-.landing-preview-card { background: var(--hc-paper); border: 1px solid var(--hc-line); box-shadow: var(--hc-shadow-sm); }
-.landing-preview-card__name { color: var(--hc-ink); }
-.landing-preview-card__metric-label, .landing-preview-card__metric-unit { color: var(--hc-bark); }
-.landing-preview-card__metric-value { color: var(--hc-ink); }
-.landing-preview-note { color: var(--hc-stone); }
-
-.landing-features {
-  background: linear-gradient(180deg, transparent 0%, rgba(241,234,219,0.6) 100%);
-  border-top: 1px solid var(--hc-line);
-  border-bottom: 1px solid var(--hc-line);
-}
-.landing-section-title { color: var(--hc-ink); }
-.landing-section-sub { color: var(--hc-bark); }
-.landing-feature-card { background: var(--hc-paper); border: 1px solid var(--hc-line); box-shadow: var(--hc-shadow-sm); }
-.landing-feature-card:hover { box-shadow: var(--hc-shadow-lg); }
-.landing-feature-card__icon { background: var(--hc-cream-deep); }
-.landing-feature-card__title { color: var(--hc-ink); }
-.landing-feature-card__desc { color: var(--hc-bark); }
-
-.landing-station-pill {
-  background: var(--hc-paper);
-  border: 1px solid var(--hc-line);
-  color: var(--hc-ink);
-}
-.landing-station-pill__num {
-  background: var(--hc-river);
-  color: #fff;
+.briefing-summary {
+  font-size: 0.92rem;
+  line-height: 1.65;
+  color: #e2e8f0;
 }
 
-.landing-final-cta__title { color: var(--hc-ink); }
-.landing-final-cta__sub { color: var(--hc-bark); }
-.landing-footer { color: var(--hc-stone); }
-.landing-footer-link { color: var(--hc-river); }
-.landing-footer-link:hover { color: var(--hc-river-bright); }
-
-/* ── Account, pricing, generic inputs ─────────────────────────────── */
-
-.account__btn,
-button.account__btn { background: var(--hc-river); color: #fff; border-radius: var(--hc-radius-sm); }
-.account__btn:hover:not(:disabled) { background: var(--hc-river-bright); }
-.account__btn--ghost { background: transparent; color: var(--hc-bark); border: 1px solid var(--hc-line); }
-.account__btn--ghost:hover { background: var(--hc-cream-deep); color: var(--hc-ink); }
-.account__btn--danger { background: var(--alert-red); }
-.account__input, .account__input:focus {
-  background: var(--hc-paper);
-  color: var(--hc-ink);
-  border: 1px solid var(--hc-line);
-}
-.account__input:focus { outline: 3px solid rgba(63,143,176,0.25); border-color: var(--hc-river); }
-.account__card { background: var(--hc-paper); border: 1px solid var(--hc-line); box-shadow: var(--hc-shadow-sm); }
-.account__nav-item { color: var(--hc-bark); }
-.account__nav-item.is-active { background: var(--hc-cream-deep); color: var(--hc-ink); border-color: var(--hc-line); }
-.account__title { color: var(--hc-ink); }
-.account__section-title { color: var(--hc-ink); }
-.account__section-desc { color: var(--hc-bark); }
-
-/* ── Accessibility: visible focus on the warm palette ─────────────── */
-
-a:focus-visible, button:focus-visible, [role="button"]:focus-visible,
-.landing-btn:focus-visible {
-  outline: 3px solid rgba(63, 143, 176, 0.35);
-  outline-offset: 2px;
-  border-radius: 6px;
+.briefing-meta {
+  font-size: 0.78rem;
+  color: #64748b;
 }
 
-/* Reduce motion: respect the user's OS preference for the hover lifts. */
-@media (prefers-reduced-motion: reduce) {
-  .gauge-card:hover, .landing-feature-card:hover { transform: none; }
+/* ── Alert badges ── */
+.alert-badge {
+  font-size: 0.78rem;
+  padding: 3px 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 
-/* ── Misc dark-on-dark panels that need cream treatment ───────────── */
-
-.loading-spinner { border-color: rgba(47,107,134,0.2); border-top-color: var(--hc-river); }
-.loading-screen { color: var(--hc-bark); }
-
-.rate-summary {
-  background: var(--hc-cream-deep);
-  border: 1px solid var(--hc-line);
-}
-.rate-summary-title { color: var(--hc-bark); }
-
-.error-banner {
-  background: rgba(198,70,60,0.10);
-  border-color: rgba(198,70,60,0.4);
-  color: var(--alert-red);
-}
-.surge-banner, .surge-warning {
-  background: rgba(217,113,74,0.12);
-  border-color: rgba(217,113,74,0.4);
-  color: var(--alert-orange);
-}
-.stale-indicator { color: var(--hc-stone); }
-
-.flood-countdown {
-  background: rgba(198,70,60,0.10);
-  border-color: rgba(198,70,60,0.35);
-  color: var(--alert-red);
+/* ── Stale indicator ── */
+.stale-indicator {
+  font-size: 0.72rem;
 }
 
-.ai-stats-row { background: var(--hc-cream-deep); border: 1px solid var(--hc-line); }
-.ai-stat { border-right-color: var(--hc-line); }
-.ai-stat-value { color: var(--hc-ink); }
-
-.thermometer {
-  background: var(--hc-cream-deep);
-  border: 1px solid var(--hc-line);
-  box-shadow: inset 0 2px 8px rgba(42,39,35,0.08);
+/* ── ReservoirCard ── */
+.reservoir-card {
+  border-color: rgba(255, 255, 255, 0.13);
 }
 
-.nws-alert {
-  background: var(--alert-bg, var(--hc-paper));
-  border: 1px solid var(--alert-border, var(--hc-line));
-  color: var(--alert-fg, var(--hc-ink));
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
-.nws-alert--extreme {
-  --alert-bg: rgba(111,43,38,0.92);
-  --alert-border: rgba(111,43,38,0.6);
-  --alert-fg: #FFF5F2;
-}
-.nws-alert--severe {
-  --alert-bg: rgba(198,70,60,0.14);
-  --alert-border: rgba(198,70,60,0.45);
-  --alert-fg: var(--alert-red);
-}
-
-/* ── Reservoir card: warm the bright-blue gradients ───────────────── */
-
-.reservoir-card,
-.reservoir-card__panel {
-  background: var(--hc-paper);
-  border: 1px solid var(--hc-line);
-  color: var(--hc-ink);
-  box-shadow: var(--hc-shadow-sm);
-}
-/* Capacity / fill bars switch from cyan→violet to river teal→cedar */
-.reservoir-card__bar,
-.reservoir-card__fill,
-.reservoir-card .capacity-fill {
-  background: linear-gradient(90deg, var(--hc-river), var(--hc-cedar)) !important;
-}
-.reservoir-card__hero {
-  background: linear-gradient(160deg,
-    rgba(47,107,134,0.10) 0%,
-    rgba(92,126,90,0.06) 60%,
-    var(--hc-cream-deep) 100%) !important;
-  border: 1px solid var(--hc-line);
-}
-.reservoir-card__water,
-.reservoir-card__water-fill {
-  background: linear-gradient(to top, var(--hc-river-deep), var(--hc-river-bright)) !important;
-}
-
-/* ── Basin briefing + gauge briefing cards ───────────────────────── */
-
-.basin-briefing,
-.gauge-briefing,
-.gauge-briefing-card {
-  background: var(--hc-paper);
-  border: 1px solid var(--hc-line);
-  color: var(--hc-ink);
-  box-shadow: var(--hc-shadow-sm);
-}
-.basin-briefing__meta,
-.gauge-briefing__meta { color: var(--hc-bark); }
-
-/* ── Mobile responsive bumps for the new theme ───────────────────── */
-@media (max-width: 540px) {
-  .landing-hero { padding: 56px 18px 40px; }
-  .landing-hero__title { font-size: clamp(1.65rem, 7vw, 2.4rem); }
-  .landing-preview-grid { grid-template-columns: 1fr 1fr; }
-  .landing-features, .landing-stations, .landing-final-cta { padding-left: 18px; padding-right: 18px; }
-  body::after { height: 80px; opacity: 0.4; }
+.reservoir-card__title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #e2e8f0;
 }

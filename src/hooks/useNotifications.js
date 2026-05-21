@@ -1,16 +1,7 @@
-// useNotifications.js
-// Issue #3: RED and BLACK automatic browser push notification pipeline
-// Phase 1: Browser notifications with dedup and rate limiting
 import { useEffect, useRef, useCallback } from 'react'
+import { ALERT_LEVELS } from '../lib/alertEngine'
 
-const NOTIFY_LEVELS = ['RED', 'BLACK']
-const ALERT_LABELS = {
-  GREEN: 'Normal',
-  YELLOW: 'Early rise detected',
-  ORANGE: 'Rapid rise warning',
-  RED: 'Dangerous rise',
-  BLACK: 'Critical / catastrophic'
-}
+const NOTIFY_LEVELS = Object.keys(ALERT_LEVELS).filter(k => ALERT_LEVELS[k].priority >= 3)
 
 // Rate limit: do not re-notify the same gauge+level within this window
 const RATE_LIMIT_MS = 10 * 60 * 1000 // 10 minutes
@@ -42,15 +33,6 @@ function dedupKey(gaugeId, level) {
   return `${gaugeId}__${level}`
 }
 
-/**
- * useNotifications(gaugesData)
- *
- * Watches gaugesData for RED/BLACK alert escalations and fires
- * browser push notifications with dedup + rate limiting.
- *
- * Usage: call at the top of App or a top-level provider:
- *   useNotifications(data)
- */
 export function useNotifications(gaugesData) {
   const permissionRef = useRef(
     typeof Notification !== 'undefined' ? Notification.permission : 'default'
@@ -76,7 +58,7 @@ export function useNotifications(gaugesData) {
     const lastSent = sentMapRef.current[key] || 0
     if (Date.now() - lastSent < RATE_LIMIT_MS) return // rate limited
 
-    const label = ALERT_LABELS[level] || level
+    const label = ALERT_LEVELS[level]?.label || level
     const heightStr = typeof height === 'number' ? ` | ${height.toFixed(2)} ft` : ''
     const riseStr = typeof rise60m === 'number' && rise60m > 0
       ? ` | +${rise60m.toFixed(2)} ft/hr`

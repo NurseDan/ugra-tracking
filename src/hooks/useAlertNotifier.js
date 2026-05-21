@@ -13,6 +13,13 @@ function priority(level) {
   return ALERT_LEVELS[level]?.priority ?? 0
 }
 
+function normalizeAlerts(raw) {
+  if (Array.isArray(raw)) return raw
+  if (Array.isArray(raw?.alerts)) return raw.alerts
+  if (Array.isArray(raw?.data)) return raw.data
+  return null
+}
+
 function findGauge(gauges, id) {
   if (!Array.isArray(gauges)) return null
   return gauges.find((g) => g?.id === id) || null
@@ -62,13 +69,7 @@ export function useAlertNotifier(gaugesData, nwsAlerts, options = {}) {
     initializedRef.current = true
   }, [gaugesData, gauges, enabled])
 
-  const alertsArray = Array.isArray(nwsAlerts)
-    ? nwsAlerts
-    : Array.isArray(nwsAlerts?.alerts)
-      ? nwsAlerts.alerts
-      : Array.isArray(nwsAlerts?.data)
-        ? nwsAlerts.data
-        : null
+  const alertsArray = normalizeAlerts(nwsAlerts)
 
   useEffect(() => {
     if (!enabled || !isSupported() || !alertsArray || !isNwsAlertsEnabled()) return
