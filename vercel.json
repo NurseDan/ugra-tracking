@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/cron/poll",
+      "destination": "/api/cron/poll.js"
+    },
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.js"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/poll",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
