@@ -10,6 +10,7 @@
     "dev": "node --env-file=.env server.js & vite",
     "server": "node --env-file=.env server.js",
     "build": "vite build",
+    "start": "npm run build && node server.js",
     "preview": "vite preview",
     "test": "node src/lib/nwsAlerts.test.mjs && node src/lib/alertEngine.test.mjs && node src/lib/surgeEngine.test.mjs && node src/lib/riseForecast.test.mjs && node src/lib/alertColors.test.mjs && node src/lib/formatTime.test.mjs && node server/alertEngine.test.mjs && node server/sources.test.mjs && node server/llm.test.mjs && node server/csrf.test.mjs"
   },
