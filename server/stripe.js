@@ -134,4 +134,47 @@ router.post('/webhook', async (req, res) => {
   res.json({ received: true })
 })
 
+// Named export used by server.js for the raw-body webhook route.
+export async function handleStripeWebhook(rawBody, sig) {
+  const stripe = getStripe()
+  if (!stripe) return // Stripe not configured — silently skip
+
+  let event
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET)
+  } catch (err) {
+    throw new Error(`Webhook signature verification failed: ${err.message}`)
+  }
+
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object
+    const userId = session.client_reference_id
+    if (userId) {
+      await query(
+        `UPDATE users SET plan = 'pro', stripe_customer_id = $2, stripe_subscription_id = $3, updated_at = now() WHERE id = $1`,
+        [userId, session.customer, session.subscription]
+      )
+    }
+  } else if (event.type === 'customer.subscription.updated') {
+    const sub = event.data.object
+    if (['active', 'trialing'].includes(sub.status)) {
+      await query(
+        `UPDATE users SET plan = 'pro', plan_expires_at = to_timestamp($2), updated_at = now() WHERE stripe_subscription_id = $1`,
+        [sub.id, sub.current_period_end]
+      )
+    } else if (['past_due', 'canceled', 'unpaid'].includes(sub.status)) {
+      await query(
+        `UPDATE users SET plan = 'free', updated_at = now() WHERE stripe_subscription_id = $1`,
+        [sub.id]
+      )
+    }
+  } else if (event.type === 'customer.subscription.deleted') {
+    const sub = event.data.object
+    await query(
+      `UPDATE users SET plan = 'free', stripe_subscription_id = null, updated_at = now() WHERE stripe_subscription_id = $1`,
+      [sub.id]
+    )
+  }
+}
+
 export default router
