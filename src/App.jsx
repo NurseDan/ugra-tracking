@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, Suspense, lazy } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { GAUGES, REFRESH_MS, FAST_FLOW_MPH, FLOOD_FLOW_MPH, STALE_AFTER_MINUTES } from './config/gauges'
 import { fetchUSGSGauges } from './lib/usgs'
 import { fetchPrecipitationForecast } from './lib/weatherApi'
@@ -134,8 +134,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/privacy" element={<PrivacyPolicy />} />
       <Route path="/terms" element={<TermsOfService />} />
-      <Route path="/login" element={!session ? <Login /> : <Navigate to="/" />} />
-      <Route path="/register" element={!session ? <Register /> : <Navigate to="/" />} />
+      <Route path="/login" element={!session ? <Login /> : <Navigate to="/my-alerts" replace />} />
+      <Route path="/register" element={!session ? <Register /> : <Navigate to="/my-alerts" replace />} />
       <Route path="*" element={<MainLayout />} />
     </Routes>
   )
