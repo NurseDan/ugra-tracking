@@ -1,6 +1,6 @@
 import { ALERT_LEVELS } from './alertEngine.js'
 
-const DEFAULT_MODEL = 'gpt-4o-mini'
+const DEFAULT_MODEL = 'gemini-2.5-flash'
 const OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions'
 
 export const RISK_LEVELS = ['low', 'watch', 'warning', 'critical']

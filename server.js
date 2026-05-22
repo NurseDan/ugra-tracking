@@ -64,11 +64,10 @@ app.use(express.json({ limit: '64kb' }))
 // would mutate state.
 app.use(csrfMiddleware)
 
-// --- Existing OpenAI proxy --------------------------------------------
+// --- Existing AI proxy --------------------------------------------
 
-const OPENAI_ENDPOINT = 'https://api.openai.com/v1/chat/completions'
-const DEFAULT_MODEL = 'gpt-4o-mini'
-const ALLOWED_MODELS = new Set(['gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'])
+const DEFAULT_MODEL = 'gemini-2.5-flash'
+const ALLOWED_MODELS = new Set(['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gpt-4o-mini', 'gpt-4o', 'gpt-4-turbo', 'gpt-3.5-turbo'])
 const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX = 20
 const rateLimitMap = new Map()
@@ -100,7 +99,7 @@ const AI_CACHE_TTL_MS = 10 * 60_000
 
 function aiCacheKey({ model, system, user, schema }) {
   return createHash('sha256')
-    .update(model + '' + system + '' + user + '' + JSON.stringify(schema || null))
+    .update(model + ' ' + system + ' ' + user + ' ' + JSON.stringify(schema || null))
     .digest('hex')
 }
 
@@ -165,10 +164,8 @@ app.post('/api/chat', async (req, res) => {
     }
   }
 
-  // 2) Fall back to the server-funded key, gated by plan quota. This stays
-  //    available so anonymous-but-allowed callers (e.g. when OPENAI_API_KEY
-  //    is set and the plan allows it) still work.
-  const apiKey = process.env.OPENAI_API_KEY
+  // 2) Fall back to the server-funded key, gated by plan quota.
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) return res.status(402).json({
     error: 'No API key on file. Add your own provider key under Account → AI Key, or ask the admin to configure a shared key.'
   })
@@ -195,6 +192,14 @@ app.post('/api/chat', async (req, res) => {
     res.set('X-RateLimit-Remaining', Math.max(0, limits.aiCallsPerDay - used))
     if (used >= limits.aiCallsPerDay)
       return res.status(429).json({ error: `Daily AI limit reached (${limits.aiCallsPerDay}). Add your own API key for unlimited use.` })
+
+    if (limits.aiCallsPerMonth && limits.aiCallsPerMonth !== Infinity) {
+      const monthRow = await dbQuery(
+        `SELECT SUM(request_count) as month_count FROM ai_usage WHERE user_id=$1 AND date_trunc('month', date) = date_trunc('month', CURRENT_DATE)`, [userId])
+      const usedMonth = parseInt(monthRow.rows[0]?.month_count || 0, 10)
+      if (usedMonth >= limits.aiCallsPerMonth)
+        return res.status(429).json({ error: `Monthly AI limit reached (${limits.aiCallsPerMonth}). Add your own API key for unlimited use.` })
+    }
   }
 
   // Server-side cache: identical (model, system, user, schema) within the
@@ -217,21 +222,17 @@ app.post('/api/chat', async (req, res) => {
   }
   res.set('X-AI-Cache', 'miss')
 
-  const body = {
-    model: resolvedModel,
-    temperature: 0.2,
-    max_tokens: cappedMaxTokens,
-    messages: [{ role: 'system', content: cleanSystem }, { role: 'user', content: cleanUser }]
-  }
-  if (schema) body.response_format = { type: 'json_schema', json_schema: { name: schemaName || 'briefing', schema, strict: true } }
   try {
-    const upstream = await fetch(OPENAI_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify(body)
+    const result = await callProvider({
+      provider: 'google',
+      model: resolvedModel,
+      key: apiKey,
+      system: cleanSystem,
+      user: cleanUser,
+      schema,
+      schemaName,
+      maxTokens: cappedMaxTokens,
     })
-    if (!upstream.ok) return res.status(upstream.status).json({ error: (await upstream.text().catch(() => '')).slice(0, 500) })
-    const result = await upstream.json()
 
     if (userId) {
       const { query: dbQuery } = await import('./server/db.js')
@@ -272,8 +273,8 @@ app.post('/api/chat', async (req, res) => {
     }
 
     res.json(result)
-  } catch {
-    res.status(500).json({ error: 'Internal server error' })
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message || 'Internal server error' })
   }
 })
 
@@ -309,6 +310,12 @@ async function main() {
 
   app.use('/api', apiRouter)
 
+  app.post('/api/internal/cron', async (req, res) => {
+    const { tick } = await import('./server/poller.js')
+    await tick()
+    res.json({ ok: true })
+  })
+
   // Serve the built SPA in production (single-port deploy).
   const distDir = path.join(__dirname, 'dist')
   if (existsSync(distDir)) {
@@ -321,7 +328,13 @@ async function main() {
     console.log('[server] serving static SPA from', distDir)
   }
 
-  startPoller()
+  // Only start the background poller interval if not running on Cloud Run,
+  // since Cloud Run scales to zero and requires a Scheduler trigger instead.
+  if (!process.env.K_SERVICE) {
+    startPoller()
+  } else {
+    console.log('[server] Running in Cloud Run environment; relying on external cron triggers.')
+  }
 
   const PORT = Number(process.env.PORT || process.env.API_PORT || 3001)
   app.listen(PORT, '0.0.0.0', () => {

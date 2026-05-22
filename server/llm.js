@@ -13,6 +13,12 @@ if (!SECRET) {
 const KEY = SECRET ? createHash('sha256').update(SECRET).digest() : null
 
 export const PROVIDERS = {
+  google: {
+    label: 'Google Gemini',
+    endpoint: 'https://generativelanguage.googleapis.com/v1beta',
+    defaultModel: 'gemini-2.5-flash',
+    style: 'gemini',
+  },
   openai: {
     label: 'OpenAI',
     endpoint: 'https://api.openai.com/v1/chat/completions',
@@ -105,8 +111,34 @@ export async function callProvider({ provider, model, key, system, user, schema,
   if (!p) throw Object.assign(new Error('Unsupported provider'), { status: 400 })
   const resolvedModel = model || p.defaultModel
 
-  let body, headers
-  if (p.style === 'anthropic') {
+  let body, headers, finalEndpoint = p.endpoint
+  if (p.style === 'gemini') {
+    headers = {
+      'Content-Type': 'application/json',
+    }
+    body = {
+      contents: [{ role: 'user', parts: [{ text: user }] }],
+      systemInstruction: { role: 'user', parts: [{ text: system }] },
+      generationConfig: { maxOutputTokens: maxTokens, temperature: 0.2 },
+    }
+    if (schema) {
+      // Gemini strict JSON output schema support
+      // Note: Must strip elements not supported by OpenAPI 3.0 schema subset
+      const cleanSchema = JSON.parse(JSON.stringify(schema))
+      const clean = (obj) => {
+        if (!obj || typeof obj !== 'object') return
+        delete obj.additionalProperties
+        delete obj.minItems
+        delete obj.maxItems
+        for (const k of Object.keys(obj)) clean(obj[k])
+      }
+      clean(cleanSchema)
+      
+      body.generationConfig.responseMimeType = 'application/json'
+      body.generationConfig.responseSchema = cleanSchema
+    }
+    finalEndpoint = `${p.endpoint}/models/${resolvedModel}:generateContent?key=${key}`
+  } else if (p.style === 'anthropic') {
     headers = {
       'Content-Type': 'application/json',
       'x-api-key': key,
@@ -140,7 +172,7 @@ export async function callProvider({ provider, model, key, system, user, schema,
     }
   }
 
-  const upstream = await fetch(p.endpoint, {
+  const upstream = await fetch(finalEndpoint, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -158,13 +190,22 @@ export async function callProvider({ provider, model, key, system, user, schema,
   const raw = await upstream.json()
 
   // Normalize to the OpenAI choices[0].message.content shape that the
-  // client code expects, so BYOK Anthropic users get the same response.
+  // client code expects, so BYOK Anthropic/Gemini users get the same response.
   if (p.style === 'anthropic') {
     const content = raw.content?.find(c => c.type === 'text')?.text ?? ''
     return {
       choices: [{ message: { role: 'assistant', content } }],
       usage: raw.usage,
       model: raw.model,
+      provider,
+    }
+  }
+  if (p.style === 'gemini') {
+    const content = raw.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+    return {
+      choices: [{ message: { role: 'assistant', content } }],
+      usage: raw.usageMetadata,
+      model: resolvedModel,
       provider,
     }
   }
