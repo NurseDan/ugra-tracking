@@ -36,8 +36,5 @@
   },
   "overrides": {
     "tar": ">=7.5.11"
-  },
-  "devDependencies": {
-    "puppeteer": "^25.0.4"
   }
 }
