@@ -44,6 +44,11 @@ export default function BasinBriefingHeader({
               <span>{briefing.headline}</span>
             </div>
             <div className="basin-briefing-summary">{briefing.summary}</div>
+            {briefing.radarInsight && (
+              <div className="basin-briefing-radar" style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: '#60a5fa' }}>
+                <strong>Radar Insight:</strong> {briefing.radarInsight}
+              </div>
+            )}
           </>
         )}
       </div>

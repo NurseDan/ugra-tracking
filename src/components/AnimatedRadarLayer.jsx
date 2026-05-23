@@ -87,6 +87,7 @@ export default function AnimatedRadarLayer({
           opacity={opacity}
           attribution='Radar &copy; <a href="https://www.rainviewer.com/">RainViewer</a>'
           zIndex={400}
+          maxNativeZoom={13}
         />
       ) : null}
 
@@ -97,6 +98,7 @@ export default function AnimatedRadarLayer({
           url={next.url}
           opacity={0}
           zIndex={399}
+          maxNativeZoom={13}
         />
       ) : null}
 

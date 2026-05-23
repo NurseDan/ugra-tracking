@@ -84,6 +84,12 @@ export default function GaugeBriefingCard({
           <div className="briefing-headline">{briefing.headline}</div>
           <p className="briefing-summary">{briefing.summary}</p>
 
+          {briefing.radarInsight && (
+            <div className="briefing-radar-insight" style={{ marginTop: '0.5rem', padding: '0.5rem', background: 'rgba(59, 130, 246, 0.1)', borderRadius: '4px', borderLeft: '3px solid #3b82f6', fontSize: '0.85rem' }}>
+              <strong>Radar Insight:</strong> {briefing.radarInsight}
+            </div>
+          )}
+
           {briefing.keyFactors?.length > 0 && (
             <ul className="briefing-factors">
               {briefing.keyFactors.map((f, i) => (

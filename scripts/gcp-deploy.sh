@@ -51,9 +51,9 @@ fi
 # Create Database inside instance
 gcloud sql databases create $DB_NAME --instance=$DB_INSTANCE --project $PROJECT_ID || true
 
-# Update password (prompting for secure entry)
-read -s -p "Enter a password for the Postgres user: " DB_PASS
-echo ""
+# Update password (auto-generating secure password)
+DB_PASS=$(openssl rand -base64 15 | tr -dc 'a-zA-Z0-9')
+echo "Generated secure password for database user..."
 gcloud sql users set-password $DB_USER --instance=$DB_INSTANCE --password="$DB_PASS" --project $PROJECT_ID
 
 # 4. Create Secrets in Secret Manager
@@ -63,6 +63,13 @@ DATABASE_URL="postgres://$DB_USER:$DB_PASS@localhost:5432/$DB_NAME?host=/cloudsq
 
 echo -n "$DATABASE_URL" | gcloud secrets create DATABASE_URL --data-file=- --project $PROJECT_ID || \
 echo -n "$DATABASE_URL" | gcloud secrets versions add DATABASE_URL --data-file=- --project $PROJECT_ID
+
+echo "Granting Secret Manager access to Cloud Run service account..."
+PROJECT_NUMBER=$(gcloud projects describe $PROJECT_ID --format="value(projectNumber)")
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${PROJECT_NUMBER}-compute@developer.gserviceaccount.com" \
+    --role="roles/secretmanager.secretAccessor" \
+    --condition=None > /dev/null
 
 # 5. Deploy to Cloud Run
 echo "Deploying to Cloud Run..."
@@ -76,21 +83,21 @@ gcloud run deploy $SERVICE_NAME \
   --set-secrets="DATABASE_URL=DATABASE_URL:latest"
 
 # 6. Setup Cloud Scheduler
-echo "Setting up Background Poller Scheduler..."
+echo "Setting up Background Poller Scheduler (Scheduler runs in us-central1 regardless of app region)..."
 SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --project $PROJECT_ID --format="value(status.url)")
 
-if ! gcloud scheduler jobs describe poller-tick --location $REGION --project $PROJECT_ID > /dev/null 2>&1; then
+if ! gcloud scheduler jobs describe poller-tick --location us-central1 --project $PROJECT_ID > /dev/null 2>&1; then
   gcloud scheduler jobs create http poller-tick \
     --schedule="* * * * *" \
     --uri="$SERVICE_URL/api/internal/cron" \
     --http-method=POST \
-    --location=$REGION \
+    --location=us-central1 \
     --project $PROJECT_ID \
-    --oidc-service-account-email="$(gcloud config get-value account)"
+    --oidc-service-account-email="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 else
   gcloud scheduler jobs update http poller-tick \
     --uri="$SERVICE_URL/api/internal/cron" \
-    --location=$REGION \
+    --location=us-central1 \
     --project $PROJECT_ID
 fi
 

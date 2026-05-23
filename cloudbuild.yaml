@@ -4,14 +4,14 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/app-repo/guadalupe-sentinel:$COMMIT_SHA'
+      - 'us-south1-docker.pkg.dev/$PROJECT_ID/app-repo/guadalupe-sentinel:$COMMIT_SHA'
       - '.'
 
   # 2. Push the Docker image to Google Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/app-repo/guadalupe-sentinel:$COMMIT_SHA'
+      - 'us-south1-docker.pkg.dev/$PROJECT_ID/app-repo/guadalupe-sentinel:$COMMIT_SHA'
 
   # 3. Deploy the Docker image to Google Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -21,14 +21,14 @@ steps:
       - 'deploy'
       - 'guadalupe-sentinel'
       - '--image'
-      - 'us-central1-docker.pkg.dev/$PROJECT_ID/app-repo/guadalupe-sentinel:$COMMIT_SHA'
+      - 'us-south1-docker.pkg.dev/$PROJECT_ID/app-repo/guadalupe-sentinel:$COMMIT_SHA'
       - '--region'
-      - 'us-central1'
+      - 'us-south1'
       # The database URL and Stripe keys should already be mounted in the service by the deploy script.
       # Cloud Build will just update the image being used by the existing service.
 
 images:
-  - 'us-central1-docker.pkg.dev/$PROJECT_ID/app-repo/guadalupe-sentinel:$COMMIT_SHA'
+  - 'us-south1-docker.pkg.dev/$PROJECT_ID/app-repo/guadalupe-sentinel:$COMMIT_SHA'
 
 options:
   logging: CLOUD_LOGGING_ONLY

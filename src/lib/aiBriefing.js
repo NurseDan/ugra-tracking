@@ -8,7 +8,7 @@ export const RISK_LEVELS = ['low', 'watch', 'warning', 'critical']
 const GAUGE_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['riskLevel', 'headline', 'summary', 'keyFactors', 'confidence'],
+  required: ['riskLevel', 'headline', 'summary', 'keyFactors', 'radarInsight', 'confidence'],
   properties: {
     riskLevel: { type: 'string', enum: RISK_LEVELS },
     headline: { type: 'string', maxLength: 140 },
@@ -19,6 +19,7 @@ const GAUGE_SCHEMA = {
       minItems: 1,
       maxItems: 6
     },
+    radarInsight: { type: 'string' },
     confidence: { type: 'number', minimum: 0, maximum: 1 }
   }
 }
@@ -26,7 +27,7 @@ const GAUGE_SCHEMA = {
 const BASIN_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['riskLevel', 'headline', 'summary', 'keyFactors', 'confidence'],
+  required: ['riskLevel', 'headline', 'summary', 'keyFactors', 'radarInsight', 'confidence'],
   properties: {
     riskLevel: { type: 'string', enum: RISK_LEVELS },
     headline: { type: 'string', maxLength: 140 },
@@ -37,6 +38,7 @@ const BASIN_SCHEMA = {
       minItems: 1,
       maxItems: 5
     },
+    radarInsight: { type: 'string' },
     confidence: { type: 'number', minimum: 0, maximum: 1 }
   }
 }
@@ -49,6 +51,7 @@ Rules:
 - If data is missing or stale, say so plainly and lower confidence.
 - Use cautious language; do not give evacuation orders or contradict NWS.
 - Riverine response is delayed; rainfall now -> rises hours later. Acknowledge that when rain is forecast.
+- Synthesize the incoming precipitation/radar data into a short 'radarInsight' summary.
 - Output MUST be valid JSON matching the requested schema, no prose outside JSON.`
 
 export const BASIN_SYSTEM_PROMPT = `You are a hydrology briefing assistant for the Guadalupe River basin in Texas.
@@ -58,6 +61,7 @@ Rules:
 - Mention the most elevated gauges by name when risk > low.
 - Never invent gauges, numbers, or alerts not in the input.
 - Keep summary <= 320 characters; headline <= 80 characters.
+- Produce a 'radarInsight' sentence analyzing basin-wide precipitation forecasts and radar trends.
 - Output MUST be valid JSON matching the requested schema.`
 
 function unavailable(reason = 'AI briefing unavailable — add OPENAI_API_KEY to server secrets') {
@@ -323,7 +327,7 @@ DATA:
 ${compactJson(context)}
 
 Return JSON with: riskLevel (low|watch|warning|critical), headline (<=140 chars), summary (1-3 sentences),
-keyFactors (1-6 short bullet strings), confidence (0..1).`
+keyFactors (1-6 short bullet strings), radarInsight (1 sentence precipitation/radar analysis), confidence (0..1).`
 
   try {
     const result = await provider.chatJson({
@@ -370,7 +374,7 @@ DATA:
 ${compactJson(basinContext)}
 
 Return JSON with: riskLevel (low|watch|warning|critical), headline (<=80 chars),
-summary (<=320 chars, 1-2 sentences), keyFactors (1-5 short bullets), confidence (0..1).`
+summary (<=320 chars, 1-2 sentences), keyFactors (1-5 short bullets), radarInsight (1 sentence radar analysis), confidence (0..1).`
 
   try {
     const result = await provider.chatJson({
