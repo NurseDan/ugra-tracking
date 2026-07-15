@@ -6,4 +6,4 @@ buildCommand = "npm run build"
 startCommand = "node server.js"
 restartPolicyType = "always"
 healthcheckPath = "/health"
-healthcheckTimeout = 10
+healthcheckTimeout = 120
